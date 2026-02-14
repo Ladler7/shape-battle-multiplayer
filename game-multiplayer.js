@@ -127,7 +127,7 @@ let introProgress = 0;
 // ===== MULTIPLAYER CONNECTION =====
 function initializeMultiplayer() {
   // Connect to your server (change this URL to your deployed server)
-  socket = io('http://localhost:3000'); // Change to your server URL
+  socket = io('https://shape-battle.onrender.com');
 
   socket.on('connect', () => {
     console.log('Connected to server!');
