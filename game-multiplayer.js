@@ -436,29 +436,90 @@ function draw() {
   } else if (gameState === 'waiting') {
     drawWaitingScreen();
   } else if (gameState === 'selection') {
-    drawSelectionScreen();
+    let cols = 3;
+    let rows = 3;
     
-    if (gameMode === 'single' && player1Choice && selectedBotCharacter) {
-      gameState = 'countdown';
-      lastCountdownTime = millis();
-      countdownTimer = 3;
-    } else if (gameMode === 'two' && player1Choice && player2Choice && !isMultiplayer) {
-      gameState = 'countdown';
-      lastCountdownTime = millis();
-      countdownTimer = 3;
+    if (isMultiplayer) {
+      // In multiplayer, each player can only click their own side
+      let myGridStartX = myPlayerNumber === 1 ? (width/2) * 0.15 : width/2 + (width/2) * 0.15;
+      let gridWidth = (width/2) * 0.7;
+      let cellWidth = gridWidth / cols;
+      let cellHeight = height * 0.22;
+      let gridStartY = height * 0.15;
+      
+      // Check which side was clicked
+      let clickedMyOwnSide = (myPlayerNumber === 1 && mouseX < width/2) || 
+                             (myPlayerNumber === 2 && mouseX > width/2);
+      
+      if (clickedMyOwnSide) {
+        for (let i = 0; i < shapes.length; i++) {
+          let col = i % cols;
+          let row = floor(i / cols);
+          let shapeX = myGridStartX + col * cellWidth + cellWidth / 2;
+          let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
+          
+          if (dist(mouseX, mouseY, shapeX, shapeY) < 40) {
+            // Set the choice for my player
+            if (myPlayerNumber === 1) {
+              player1Choice = shapes[i];
+            } else {
+              player2Choice = shapes[i];
+            }
+            
+            // Send to server
+            socket.emit('character-selected', {
+              gameId: currentGameId,
+              character: shapes[i]
+            });
+            break;
+          }
+        }
+      }
+    } else {
+      // Local game selection (existing code)
+      let p1GridStartX = (width/2) * 0.15;
+      let p1GridWidth = (width/2) * 0.7;
+      let cellWidth = p1GridWidth / cols;
+      let cellHeight = height * 0.22;
+      let gridStartY = height * 0.15;
+      
+      // Player 1 selection (left side)
+      if (mouseX < width/2) {
+        for (let i = 0; i < shapes.length; i++) {
+          let col = i % cols;
+          let row = floor(i / cols);
+          let shapeX = p1GridStartX + col * cellWidth + cellWidth / 2;
+          let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
+          
+          if (dist(mouseX, mouseY, shapeX, shapeY) < 40) {
+            player1Choice = shapes[i];
+            break;
+          }
+        }
+      }
+      
+      // Player 2 or Bot selection (right side)
+      if (mouseX > width/2) {
+        let p2GridStartX = width/2 + (width/2) * 0.15;
+        for (let i = 0; i < shapes.length; i++) {
+          let col = i % cols;
+          let row = floor(i / cols);
+          let shapeX = p2GridStartX + col * cellWidth + cellWidth / 2;
+          let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
+          
+          if (dist(mouseX, mouseY, shapeX, shapeY) < 40) {
+            if (gameMode === 'single') {
+              selectedBotCharacter = shapes[i];
+              player2Choice = shapes[i];
+            } else {
+              player2Choice = shapes[i];
+            }
+            break;
+          }
+        }
+      }
     }
-  } else if (gameState === 'countdown') {
-    drawCountdown();
-  } else if (gameState === 'playing') {
-    drawGame();
-    
-    if (isMultiplayer && frameCount % 2 === 0) {
-      sendPlayerUpdate();
-    }
-  } else if (gameState === 'gameOver') {
-    drawGameOver();
   }
-}
 
 // ===== MODIFIED MOUSE PRESSED =====
 function mousePressed() {
