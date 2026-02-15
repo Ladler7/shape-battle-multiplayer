@@ -9,7 +9,7 @@ let isConnected = false;
 let square_damage = 3000;
 let square_super_damage = 5000;
 let square_movement_speed = 5;
-let triangle_damage = 750;
+let triangle_damage = 1000; // INCREASED from 750
 let triangle_super_damage = 1000;
 let triangle_movement_speed = 5;
 let triangle_bullet_speed = 15;
@@ -24,7 +24,7 @@ let oval_damage = 300;
 let oval_super_damage = 1000;
 let oval_movement_speed = 5;
 let oval_bullet_speed = 15;
-let pentagon_damage = 3500;
+let pentagon_damage = 4500; // INCREASED from 3500
 let pentagon_super_damage = 7000;
 let pentagon_movement_speed = 5;
 let pentagon_bullet_speed = 17;
@@ -32,6 +32,8 @@ let star_damage = 2500;
 let star_movement_speed = 5;
 let star_shield_duration = 5000;
 let rhombus_damage = 3000;
+let rhombus_circular_extra_damage = 1000; // NEW
+let rhombus_super_damage = 2000; // NEW - beam damage
 let rhombus_movement_speed = 5;
 let rhombus_bullet_speed = 17;
 let rhombus_melee_range = 100;
@@ -41,9 +43,10 @@ let octagon_super_damage = 3000;
 let octagon_movement_speed = 5;
 let octagon_bullet_speed = 12;
 let octagon_split_distance = 500;
-let trapezoid_damage = 3000;
+let octagon_super_pull_strength = 25; // INCREASED for full pull
+let trapezoid_damage = 3000; // CHANGED from 3000
 let trapezoid_super_damage = 3000;
-let trapezoid_movement_speed = 7;
+let trapezoid_movement_speed = 5; // REDUCED from 7
 let trapezoid_dash_distance = 200;
 
 const MAX_PARTICLES = 60;
@@ -77,6 +80,9 @@ let botAttackTimer = 0;
 let botLastPlayerPos = {x: 0, y: 0};
 let botPredictedPlayerPos = {x: 0, y: 0};
 let botStrafeDirection = 1;
+
+// NEW: For synced map generation
+let mapSeed = 0;
 
 let player1 = {
   x: 0, y: 0, size: 30, speed: 5, color: null,
@@ -152,9 +158,10 @@ function initializeMultiplayer() {
     }
   });
 
-  socket.on('start-countdown', ({ player1Choice: p1, player2Choice: p2 }) => {
+  socket.on('start-countdown', ({ player1Choice: p1, player2Choice: p2, mapSeed: seed }) => {
     player1Choice = p1;
     player2Choice = p2;
+    mapSeed = seed; // NEW: Receive map seed
     gameState = 'countdown';
     lastCountdownTime = millis();
     countdownTimer = 3;
@@ -486,35 +493,29 @@ function mousePressed() {
     let gridStartY = height * 0.15;
     
     if (isMultiplayer) {
-      let myStartX = myPlayerNumber === 1 ? 0 : width/2;
-      let myEndX = myPlayerNumber === 1 ? width/2 : width;
-      let myGridStartX = myStartX + (myEndX - myStartX) * 0.15;
-      let gridWidth = (myEndX - myStartX) * 0.7;
+      // NEW: Single centered grid for multiplayer
+      let gridStartX = width/2 - (width * 0.35);
+      let gridWidth = width * 0.7;
       let cellWidth = gridWidth / cols;
       
-      let clickedOnMySide = (myPlayerNumber === 1 && mouseX < width/2) || 
-                            (myPlayerNumber === 2 && mouseX > width/2);
-      
-      if (clickedOnMySide) {
-        for (let i = 0; i < shapes.length; i++) {
-          let col = i % cols;
-          let row = floor(i / cols);
-          let shapeX = myGridStartX + col * cellWidth + cellWidth / 2;
-          let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
-          
-          if (dist(mouseX, mouseY, shapeX, shapeY) < 40) {
-            if (myPlayerNumber === 1) {
-              player1Choice = shapes[i];
-            } else {
-              player2Choice = shapes[i];
-            }
-            
-            socket.emit('character-selected', {
-              gameId: currentGameId,
-              character: shapes[i]
-            });
-            break;
+      for (let i = 0; i < shapes.length; i++) {
+        let col = i % cols;
+        let row = floor(i / cols);
+        let shapeX = gridStartX + col * cellWidth + cellWidth / 2;
+        let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
+        
+        if (dist(mouseX, mouseY, shapeX, shapeY) < 40) {
+          if (myPlayerNumber === 1) {
+            player1Choice = shapes[i];
+          } else {
+            player2Choice = shapes[i];
           }
+          
+          socket.emit('character-selected', {
+            gameId: currentGameId,
+            character: shapes[i]
+          });
+          break;
         }
       }
     } else {
@@ -746,6 +747,7 @@ function resetGame() {
   isMultiplayer = false;
   myPlayerNumber = null;
   currentGameId = null;
+  mapSeed = 0;
   generateMap();
   initBackgroundParticles();
   initGridLines();
@@ -899,7 +901,8 @@ function drawGameOver() {
   let winnerName = "";
   
   if (gameMode === 'single') {
-    winnerName = winner === 1 ? "PLAYER WINS!" : "BOT WINS!";
+    // CHANGED: "YOU WIN" instead of "PLAYER WINS"
+    winnerName = winner === 1 ? "YOU WIN!" : "BOT WINS!";
   } else if (isMultiplayer) {
     winnerName = winner === myPlayerNumber ? "YOU WIN!" : "YOU LOSE!";
   } else {
@@ -1430,6 +1433,12 @@ function updateHealing() {
 
 function generateMap() {
   walls = [];
+  
+  // Use mapSeed for multiplayer to sync maps
+  if (isMultiplayer && mapSeed > 0) {
+    randomSeed(mapSeed);
+  }
+  
   let cols = floor(width / cellSize);
   let rows = floor(height / cellSize);
   
@@ -1458,6 +1467,11 @@ function generateMap() {
         walls.push({x: wx, y: wy, w: cellSize, h: cellSize, isBorder: false});
       }
     }
+  }
+  
+  // Reset random seed after map generation
+  if (isMultiplayer && mapSeed > 0) {
+    randomSeed(millis());
   }
   
   player1.x = cellSize * 2;
@@ -1564,21 +1578,29 @@ function drawSelectionScreen() {
   }
   drawGridLines();
   
-  push();
-  drawingContext.shadowBlur = 20;
-  drawingContext.shadowColor = 'rgba(100, 200, 255, 0.5)';
-  stroke(100, 150, 255, 150);
-  strokeWeight(3);
-  line(width/2, 0, width/2, height);
-  pop();
-  
   if (gameMode === 'single') {
+    push();
+    drawingContext.shadowBlur = 20;
+    drawingContext.shadowColor = 'rgba(100, 200, 255, 0.5)';
+    stroke(100, 150, 255, 150);
+    strokeWeight(3);
+    line(width/2, 0, width/2, height);
+    pop();
+    
     drawPlayerSide(1, 0, width/2);
     drawBotSelectionSide(width/2, width);
   } else if (isMultiplayer) {
-    drawPlayerSide(myPlayerNumber, 0, width/2);
-    drawPlayerSide(myPlayerNumber === 1 ? 2 : 1, width/2, width);
+    // NEW: Single centered selection for multiplayer
+    drawMultiplayerSelection();
   } else {
+    push();
+    drawingContext.shadowBlur = 20;
+    drawingContext.shadowColor = 'rgba(100, 200, 255, 0.5)';
+    stroke(100, 150, 255, 150);
+    strokeWeight(3);
+    line(width/2, 0, width/2, height);
+    pop();
+    
     drawPlayerSide(1, 0, width/2);
     drawPlayerSide(2, width/2, width);
   }
@@ -1589,12 +1611,94 @@ function drawSelectionScreen() {
   if (gameMode === 'single') {
     text("✨ Choose your character and the bot's character • Click to select ✨", width/2, height * 0.97);
   } else if (isMultiplayer) {
-    text("✨ Choose your character • Waiting for opponent... ✨", width/2, height * 0.97);
+    text("✨ Choose your character ✨", width/2, height * 0.97);
   } else {
     text("✨ Player 1 and Player 2: Choose your characters • Click to select ✨", width/2, height * 0.97);
   }
   
   menuAnimationOffset = (menuAnimationOffset + 0.5) % height;
+}
+
+// NEW: Multiplayer selection screen with single grid
+function drawMultiplayerSelection() {
+  push();
+  drawingContext.shadowBlur = 30;
+  drawingContext.shadowColor = 'rgba(100, 200, 255, 0.6)';
+  fill(100, 200, 255);
+  textSize(48);
+  textStyle(BOLD);
+  text("CHOOSE YOUR CHARACTER", width/2, height * 0.08);
+  pop();
+  textStyle(NORMAL);
+  
+  let cols = 3;
+  let rows = 3;
+  let gridStartX = width/2 - (width * 0.35);
+  let gridWidth = width * 0.7;
+  let cellWidth = gridWidth / cols;
+  let cellHeight = height * 0.22;
+  let gridStartY = height * 0.15;
+  
+  for (let i = 0; i < shapes.length; i++) {
+    let col = i % cols;
+    let row = floor(i / cols);
+    let shapeX = gridStartX + col * cellWidth + cellWidth / 2;
+    let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
+    
+    // Only highlight MY choice
+    let myChoice = myPlayerNumber === 1 ? player1Choice : player2Choice;
+    let isSelected = myChoice === shapes[i];
+    let isHovered = dist(mouseX, mouseY, shapeX, shapeY) < 40;
+    
+    push();
+    if (isSelected) {
+      drawingContext.shadowBlur = 25;
+      drawingContext.shadowColor = 'rgba(100, 200, 255, 0.8)';
+      fill(100, 200, 255, 180);
+      stroke(100, 200, 255);
+      strokeWeight(5);
+    } else if (isHovered) {
+      drawingContext.shadowBlur = 18;
+      drawingContext.shadowColor = 'rgba(255, 255, 255, 0.6)';
+      fill(255, 255, 255, 200);
+      stroke(200, 220, 255);
+      strokeWeight(4);
+    } else {
+      fill(60, 70, 100, 200);
+      stroke(100, 120, 160);
+      strokeWeight(2);
+    }
+    
+    rect(shapeX - 40, shapeY - 40, 80, 80, 15);
+    pop();
+    
+    fill(240, 245, 255);
+    stroke(60, 70, 90);
+    strokeWeight(2);
+    
+    push();
+    translate(shapeX, shapeY);
+    drawPlayerShape(shapes[i], 32);
+    pop();
+    
+    fill(200, 220, 255);
+    noStroke();
+    textSize(13);
+    textStyle(BOLD);
+    text(shapes[i].toUpperCase(), shapeX, shapeY + 55);
+  }
+  
+  // Show selection status
+  fill(150, 200, 255);
+  textSize(18);
+  textStyle(NORMAL);
+  if (myChoice) {
+    text(`✓ You selected: ${myChoice.toUpperCase()}`, width/2, height * 0.88);
+  } else {
+    let alpha = map(sin(millis() * 0.008), -1, 1, 150, 255);
+    fill(255, 255, 255, alpha);
+    text("Click a character to select", width/2, height * 0.88);
+  }
 }
 
 function drawPlayerSide(playerNum, startX, endX) {
@@ -1607,11 +1711,7 @@ function drawPlayerSide(playerNum, startX, endX) {
   fill(playerColor);
   textSize(36);
   textStyle(BOLD);
-  if (isMultiplayer) {
-    text(playerNum === myPlayerNumber ? "YOU" : "OPPONENT", midX, height * 0.08);
-  } else {
-    text(gameMode === 'single' && playerNum === 1 ? "Player" : `Player ${playerNum}`, midX, height * 0.08);
-  }
+  text(gameMode === 'single' && playerNum === 1 ? "Player" : `Player ${playerNum}`, midX, height * 0.08);
   pop();
   textStyle(NORMAL);
   
@@ -1632,10 +1732,6 @@ function drawPlayerSide(playerNum, startX, endX) {
     let isSelected = (playerNum === 1 && player1Choice === shapes[i]) || (playerNum === 2 && player2Choice === shapes[i]);
     let isHovered = dist(mouseX, mouseY, shapeX, shapeY) < 40 && 
                     ((playerNum === 1 && mouseX < width/2) || (playerNum === 2 && mouseX > width/2));
-    
-    if (isMultiplayer && playerNum !== myPlayerNumber) {
-      isHovered = false;
-    }
     
     push();
     if (isSelected) {
@@ -1964,7 +2060,7 @@ function updateTriangleBullets() {
         vx: cos(player1.triangleTargetAngle) * triangle_bullet_speed,
         vy: sin(player1.triangleTargetAngle) * triangle_bullet_speed,
         damage: triangle_damage, owner: 1, color: color(100, 150, 255),
-        size: 8, maxDistance: Infinity, type: 'triangle',
+        size: 12, maxDistance: Infinity, type: 'triangle',
         destroysWalls: false, rotation: 0
       });
       player1.triangleBulletCount--;
@@ -1979,7 +2075,7 @@ function updateTriangleBullets() {
         vx: cos(player2.triangleTargetAngle) * triangle_bullet_speed,
         vy: sin(player2.triangleTargetAngle) * triangle_bullet_speed,
         damage: triangle_damage, owner: 2, color: color(255, 50, 50),
-        size: 8, maxDistance: Infinity, type: 'triangle',
+        size: 12, maxDistance: Infinity, type: 'triangle',
         destroysWalls: false, rotation: 0
       });
       player2.triangleBulletCount--;
@@ -2028,7 +2124,7 @@ function updateSuperTriangleBullets() {
         vx: cos(player1.superTriangleTargetAngle) * triangle_super_bullet_speed,
         vy: sin(player1.superTriangleTargetAngle) * triangle_super_bullet_speed,
         damage: triangle_super_damage, owner: 1, color: color(255, 255, 100),
-        size: 12, maxDistance: Infinity, type: 'super-triangle',
+        size: 30, maxDistance: Infinity, type: 'super-triangle',
         destroysWalls: true, rotation: 0
       });
       player1.superBulletCount--;
@@ -2047,7 +2143,7 @@ function updateSuperTriangleBullets() {
         vx: cos(player2.superTriangleTargetAngle) * triangle_super_bullet_speed,
         vy: sin(player2.superTriangleTargetAngle) * triangle_super_bullet_speed,
         damage: triangle_super_damage, owner: 2, color: color(255, 255, 100),
-        size: 12, maxDistance: Infinity, type: 'super-triangle',
+        size: 30, maxDistance: Infinity, type: 'super-triangle',
         destroysWalls: true, rotation: 0
       });
       player2.superBulletCount--;
@@ -2169,10 +2265,10 @@ function attack(attacker, target, shape, playerNum, isSuper) {
     if (isSuper) {
       meleeEffects.push({
         x: attacker.x, y: attacker.y, angle: angle, color: attackColor,
-        life: 30, maxLife: 30, size: 250
+        life: 30, maxLife: 30, size: attacker.size * 10
       });
       
-      if (distance < 250) {
+      if (distance < attacker.size * 10) {
         dealDamage(opponent, square_super_damage, attacker);
         screenShake = 12;
       }
@@ -2206,7 +2302,7 @@ function attack(attacker, target, shape, playerNum, isSuper) {
         vx: cos(angle) * circle_super_bullet_speed,
         vy: sin(angle) * circle_super_bullet_speed,
         damage: circle_super_damage, owner: playerNum, color: attackColor,
-        size: 35, maxDistance: 700, type: 'super-circle',
+        size: attacker.size * 3, maxDistance: 700, type: 'super-circle',
         destroysWalls: true, rotation: 0
       });
     } else {
@@ -2238,7 +2334,7 @@ function attack(attacker, target, shape, playerNum, isSuper) {
         vx: cos(angle) * pentagon_bullet_speed,
         vy: sin(angle) * pentagon_bullet_speed,
         damage: pentagon_super_damage, owner: playerNum, color: attackColor,
-        size: 25, maxDistance: Infinity, type: 'super-pentagon',
+        size: attacker.size * 3, maxDistance: Infinity, type: 'super-pentagon',
         destroysWalls: false, goesThrough: true, rotation: 0
       });
     } else {
@@ -2247,7 +2343,7 @@ function attack(attacker, target, shape, playerNum, isSuper) {
         vx: cos(angle) * pentagon_bullet_speed,
         vy: sin(angle) * pentagon_bullet_speed,
         damage: pentagon_damage, owner: playerNum, color: attackColor,
-        size: 15, maxDistance: Infinity, type: 'pentagon',
+        size: 20, maxDistance: Infinity, type: 'pentagon',
         destroysWalls: false, rotation: 0
       });
     }
@@ -2271,7 +2367,24 @@ function attack(attacker, target, shape, playerNum, isSuper) {
     }
   } else if (shape === 'rhombus') {
     if (isSuper) {
-      attacker.rhombusMode = attacker.rhombusMode === 1 ? 2 : 1;
+      // NEW: Rhombus super shoots a beam
+      let angle = atan2(opponent.y - attacker.y, opponent.x - attacker.x);
+      
+      meleeEffects.push({
+        x: attacker.x, y: attacker.y, angle: angle, color: attackColor,
+        life: 40, maxLife: 40, size: 800, width: 60, isBeam: true
+      });
+      
+      // Check if beam hits opponent
+      let dx = opponent.x - attacker.x;
+      let dy = opponent.y - attacker.y;
+      let beamAngle = atan2(dy, dx);
+      let angleDiff = abs(beamAngle - angle);
+      
+      if (angleDiff < 0.2 && dist(attacker.x, attacker.y, opponent.x, opponent.y) < 800) {
+        dealDamage(opponent, rhombus_super_damage, attacker);
+        screenShake = 12;
+      }
     } else {
       if (attacker.rhombusMode === 1) {
         let angle = atan2(target.y - attacker.y, target.x - attacker.x);
@@ -2284,6 +2397,7 @@ function attack(attacker, target, shape, playerNum, isSuper) {
           destroysWalls: false, rotation: 0
         });
       } else {
+        // NEW: Circular attack with extra damage
         meleeEffects.push({
           x: attacker.x, y: attacker.y, angle: 0, color: attackColor,
           life: 20, maxLife: 20, size: rhombus_melee_range * 2,
@@ -2292,8 +2406,8 @@ function attack(attacker, target, shape, playerNum, isSuper) {
         
         let distance = dist(attacker.x, attacker.y, opponent.x, opponent.y);
         if (distance < rhombus_melee_range) {
-          dealDamage(opponent, rhombus_damage, attacker);
-          screenShake = 6;
+          dealDamage(opponent, rhombus_damage + rhombus_circular_extra_damage, attacker);
+          screenShake = 8;
         }
       }
     }
@@ -2306,12 +2420,13 @@ function attack(attacker, target, shape, playerNum, isSuper) {
         life: 30, maxLife: 30, size: 300, width: 80
       });
       
+      // NEW: Pull all the way to attacker
       projectiles.push({
         x: attacker.x, y: attacker.y, startX: attacker.x, startY: attacker.y,
         vx: cos(angle) * 15, vy: sin(angle) * 15,
         damage: octagon_super_damage, owner: playerNum, color: attackColor,
         size: 40, maxDistance: Infinity, type: 'octagon-super-pull',
-        destroysWalls: true, pullTarget: opponent, pullStrength: 15, rotation: 0
+        destroysWalls: true, pullTarget: opponent, pullStrength: octagon_super_pull_strength, rotation: 0
       });
     } else {
       let angle = atan2(target.y - attacker.y, target.x - attacker.x);
@@ -2331,11 +2446,11 @@ function attack(attacker, target, shape, playerNum, isSuper) {
       
       meleeEffects.push({
         x: attacker.x, y: attacker.y, angle: angle, color: attackColor,
-        life: 30, maxLife: 30, size: 300, width: 80
+        life: 30, maxLife: 30, size: attacker.size * 10, width: 80
       });
       
       let distance = dist(attacker.x, attacker.y, opponent.x, opponent.y);
-      if (distance < 300) {
+      if (distance < attacker.size * 10) {
         dealDamage(opponent, trapezoid_super_damage, attacker);
         screenShake = 10;
       }
@@ -2378,6 +2493,18 @@ function drawMeleeEffects() {
       stroke(red(effect.color), green(effect.color), blue(effect.color), alpha);
       strokeWeight(8);
       circle(0, 0, size);
+    } else if (effect.isBeam) {
+      // NEW: Draw beam for rhombus super
+      rotate(effect.angle);
+      noFill();
+      stroke(red(effect.color), green(effect.color), blue(effect.color), alpha);
+      strokeWeight(effect.width);
+      line(0, 0, size, 0);
+      
+      // Glow effect
+      stroke(255, 255, 255, alpha * 0.5);
+      strokeWeight(effect.width * 0.5);
+      line(0, 0, size, 0);
     } else if (effect.width) {
       rotate(effect.angle);
       noFill();
