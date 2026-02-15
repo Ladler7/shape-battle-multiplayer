@@ -46,7 +46,7 @@ let trapezoid_super_damage = 3000;
 let trapezoid_movement_speed = 7;
 let trapezoid_dash_distance = 200;
 
-const MAX_PARTICLES = 150;
+const MAX_PARTICLES = 60;
 
 let backgroundParticles = [];
 let menuAnimationOffset = 0;
@@ -118,7 +118,6 @@ let cellSize = 40;
 let gameStartTime = 0;
 let introProgress = 0;
 
-// ===== MULTIPLAYER CONNECTION =====
 function initializeMultiplayer() {
   socket = io({
     transports: ['websocket', 'polling'],
@@ -176,10 +175,6 @@ function initializeMultiplayer() {
     const choice = playerNum === 1 ? player1Choice : player2Choice;
     
     attack(attacker, attackData.target, choice, playerNum, attackData.isSuper);
-  });
-
-  socket.on('projectile-sync', ({ projectile }) => {
-    projectiles.push(projectile);
   });
 
   socket.on('health-update', ({ player1Health, player2Health }) => {
@@ -266,18 +261,12 @@ function windowResized() {
 }
 
 function drawModeSelection() {
-  for (let i = 0; i < height; i += 2) {
-    let inter = map(i, 0, height, 0, 1);
-    let c = lerpColor(color(10, 15, 35), color(25, 35, 60), inter);
-    stroke(c);
-    strokeWeight(2);
-    line(0, i, width, i);
-  }
+  background(15, 20, 40);
   
-  updateBackgroundParticles();
+  if (frameCount % 4 === 0) {
+    updateBackgroundParticles();
+  }
   drawBackgroundParticles();
-  updateGridLines();
-  drawGridLines();
   
   push();
   drawingContext.shadowBlur = 40;
@@ -371,18 +360,12 @@ function drawModeSelection() {
 }
 
 function drawWaitingScreen() {
-  for (let i = 0; i < height; i += 2) {
-    let inter = map(i, 0, height, 0, 1);
-    let c = lerpColor(color(10, 15, 35), color(25, 35, 60), inter);
-    stroke(c);
-    strokeWeight(2);
-    line(0, i, width, i);
-  }
+  background(15, 20, 40);
   
-  updateBackgroundParticles();
+  if (frameCount % 4 === 0) {
+    updateBackgroundParticles();
+  }
   drawBackgroundParticles();
-  updateGridLines();
-  drawGridLines();
   
   push();
   drawingContext.shadowBlur = 40;
@@ -448,7 +431,7 @@ function draw() {
   } else if (gameState === 'playing') {
     drawGame();
     
-    if (isMultiplayer && frameCount % 2 === 0) {
+    if (isMultiplayer && frameCount % 5 === 0) {
       sendPlayerUpdate();
     }
   } else if (gameState === 'gameOver') {
@@ -499,18 +482,20 @@ function mousePressed() {
   } else if (gameState === 'selection') {
     let cols = 3;
     let rows = 3;
+    let cellHeight = height * 0.22;
+    let gridStartY = height * 0.15;
     
     if (isMultiplayer) {
-      let myGridStartX = myPlayerNumber === 1 ? (width/2) * 0.15 : width/2 + (width/2) * 0.15;
-      let gridWidth = (width/2) * 0.7;
+      let myStartX = myPlayerNumber === 1 ? 0 : width/2;
+      let myEndX = myPlayerNumber === 1 ? width/2 : width;
+      let myGridStartX = myStartX + (myEndX - myStartX) * 0.15;
+      let gridWidth = (myEndX - myStartX) * 0.7;
       let cellWidth = gridWidth / cols;
-      let cellHeight = height * 0.22;
-      let gridStartY = height * 0.15;
       
-      let clickedMyOwnSide = (myPlayerNumber === 1 && mouseX < width/2) || 
-                             (myPlayerNumber === 2 && mouseX > width/2);
+      let clickedOnMySide = (myPlayerNumber === 1 && mouseX < width/2) || 
+                            (myPlayerNumber === 2 && mouseX > width/2);
       
-      if (clickedMyOwnSide) {
+      if (clickedOnMySide) {
         for (let i = 0; i < shapes.length; i++) {
           let col = i % cols;
           let row = floor(i / cols);
@@ -536,8 +521,6 @@ function mousePressed() {
       let p1GridStartX = (width/2) * 0.15;
       let p1GridWidth = (width/2) * 0.7;
       let cellWidth = p1GridWidth / cols;
-      let cellHeight = height * 0.22;
-      let gridStartY = height * 0.15;
       
       if (mouseX < width/2) {
         for (let i = 0; i < shapes.length; i++) {
@@ -598,7 +581,9 @@ function mousePressed() {
       }
     }
   }
-}function updatePlayers() {
+}
+
+function updatePlayers() {
   let localPlayer = null;
   let localPlayerNum = 0;
   
@@ -620,10 +605,12 @@ function mousePressed() {
     if (keyIsDown(65)) { pNewX -= localPlayer.speed; pMoved = true; }
     if (keyIsDown(68)) { pNewX += localPlayer.speed; pMoved = true; }
     
-    if (keyIsDown(UP_ARROW)) { pNewY -= localPlayer.speed; pMoved = true; }
-    if (keyIsDown(DOWN_ARROW)) { pNewY += localPlayer.speed; pMoved = true; }
-    if (keyIsDown(LEFT_ARROW)) { pNewX -= localPlayer.speed; pMoved = true; }
-    if (keyIsDown(RIGHT_ARROW)) { pNewX += localPlayer.speed; pMoved = true; }
+    if (isMultiplayer || gameMode === 'single') {
+      if (keyIsDown(UP_ARROW)) { pNewY -= localPlayer.speed; pMoved = true; }
+      if (keyIsDown(DOWN_ARROW)) { pNewY += localPlayer.speed; pMoved = true; }
+      if (keyIsDown(LEFT_ARROW)) { pNewX -= localPlayer.speed; pMoved = true; }
+      if (keyIsDown(RIGHT_ARROW)) { pNewX += localPlayer.speed; pMoved = true; }
+    }
     
     if (!checkCollision(pNewX, pNewY, localPlayer.size)) {
       localPlayer.x = pNewX;
@@ -717,7 +704,7 @@ function dealDamage(player, damage, attacker) {
   player.damageFlash = 255;
   player.scale = 1.3;
   
-  addParticleBurst(player.x, player.y, 20, player === player1 ? color(100, 150, 255) : color(255, 50, 50));
+  addParticleBurst(player.x, player.y, 15, player === player1 ? color(100, 150, 255) : color(255, 50, 50));
   
   if (attacker) {
     let attackerChoice = (attacker === player1) ? player1Choice : player2Choice;
@@ -766,7 +753,7 @@ function resetGame() {
 
 function initGridLines() {
   gridLines = [];
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 15; i++) {
     gridLines.push({
       x1: random(width),
       y1: random(height),
@@ -805,8 +792,8 @@ function addParticleBurst(x, y, count, col, glow = true) {
       y: y,
       vx: cos(angle) * random(3, 10),
       vy: sin(angle) * random(3, 10),
-      life: 40,
-      maxLife: 40,
+      life: 30,
+      maxLife: 30,
       size: random(4, 10),
       color: col,
       glow: glow
@@ -820,14 +807,14 @@ function addParticleBurst(x, y, count, col, glow = true) {
 
 function initBackgroundParticles() {
   backgroundParticles = [];
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 20; i++) {
     backgroundParticles.push({
       x: random(width),
       y: random(height),
-      size: random(2, 8),
-      speedX: random(-1, 1),
-      speedY: random(-1, 1),
-      alpha: random(50, 150),
+      size: random(2, 6),
+      speedX: random(-0.5, 0.5),
+      speedY: random(-0.5, 0.5),
+      alpha: random(50, 120),
       hue: random(180, 240),
       pulseOffset: random(TWO_PI)
     });
@@ -835,8 +822,6 @@ function initBackgroundParticles() {
 }
 
 function updateBackgroundParticles() {
-  if (frameCount % 2 !== 0) return;
-  
   for (let p of backgroundParticles) {
     p.x += p.speedX;
     p.y += p.speedY;
@@ -854,26 +839,17 @@ function drawBackgroundParticles() {
     fill(p.hue, 150, 255, p.alpha * pulse);
     noStroke();
     circle(p.x, p.y, p.size * pulse);
-    
-    fill(p.hue, 150, 255, p.alpha * pulse * 0.3);
-    circle(p.x, p.y, p.size * pulse * 2);
   }
 }
 
 function drawCountdown() {
-  for (let i = 0; i < height; i += 2) {
-    let inter = map(i, 0, height, 0, 1);
-    let c = lerpColor(color(10, 15, 35), color(25, 35, 60), inter);
-    stroke(c);
-    strokeWeight(2);
-    line(0, i, width, i);
-  }
+  background(15, 20, 40);
   
   if (millis() - lastCountdownTime >= 1000) {
     countdownTimer--;
     lastCountdownTime = millis();
     
-    addParticleBurst(width/2, height/2, 30, color(random([255, 100]), random([255, 100]), random([100, 255])));
+    addParticleBurst(width/2, height/2, 20, color(random([255, 100]), random([255, 100]), random([100, 255])));
     
     if (countdownTimer <= 0) {
       startGame();
@@ -911,15 +887,11 @@ function drawCountdown() {
 }
 
 function drawGameOver() {
-  for (let i = 0; i < height; i += 2) {
-    let inter = map(i, 0, height, 0, 1);
-    let c = lerpColor(color(10, 15, 35), color(25, 35, 60), inter);
-    stroke(c);
-    strokeWeight(2);
-    line(0, i, width, i);
-  }
+  background(15, 20, 40);
   
-  updateBackgroundParticles();
+  if (frameCount % 4 === 0) {
+    updateBackgroundParticles();
+  }
   drawBackgroundParticles();
   updateAndDrawParticles();
   
@@ -958,23 +930,6 @@ function updateAndDrawParticles() {
   for (let i = particles.length - 1; i >= 0; i--) {
     let p = particles[i];
     
-    if (p.isRing) {
-      p.ringRadius += p.ringSpeed;
-      p.life--;
-      
-      if (p.life <= 0) {
-        particles.splice(i, 1);
-        continue;
-      }
-      
-      let alpha = map(p.life, 0, p.maxLife, 0, 255);
-      noFill();
-      stroke(255, 255, 255, alpha);
-      strokeWeight(4);
-      circle(p.x, p.y, p.ringRadius * 2);
-      continue;
-    }
-    
     p.x += p.vx;
     p.y += p.vy;
     p.vy += 0.2;
@@ -989,7 +944,7 @@ function updateAndDrawParticles() {
     let alpha = map(p.life, 0, p.maxLife, 0, 255);
     let size = p.size * (p.life / p.maxLife);
     
-    if (p.glow && frameCount % 2 === 0) {
+    if (p.glow && frameCount % 3 === 0) {
       fill(red(p.color), green(p.color), blue(p.color), alpha * 0.3);
       noStroke();
       circle(p.x, p.y, size + 6);
@@ -1013,8 +968,8 @@ function updateDamageFlash() {
 }
 
 function updateTrails() {
-  if (frameCount % 3 === 0) {
-    player1.trail.push({x: player1.x, y: player1.y, life: 20});
+  if (frameCount % 4 === 0) {
+    player1.trail.push({x: player1.x, y: player1.y, life: 15});
   }
   for (let i = player1.trail.length - 1; i >= 0; i--) {
     player1.trail[i].life--;
@@ -1023,8 +978,8 @@ function updateTrails() {
     }
   }
   
-  if (frameCount % 3 === 0) {
-    player2.trail.push({x: player2.x, y: player2.y, life: 20});
+  if (frameCount % 4 === 0) {
+    player2.trail.push({x: player2.x, y: player2.y, life: 15});
   }
   for (let i = player2.trail.length - 1; i >= 0; i--) {
     player2.trail[i].life--;
@@ -1039,10 +994,10 @@ function drawTrail(player, playerNum) {
   
   for (let i = 0; i < player.trail.length; i++) {
     let t = player.trail[i];
-    let alpha = map(t.life, 0, 20, 0, 100);
+    let alpha = map(t.life, 0, 15, 0, 80);
     fill(red(trailColor), green(trailColor), blue(trailColor), alpha);
     noStroke();
-    circle(t.x, t.y, player.size * 0.5);
+    circle(t.x, t.y, player.size * 0.4);
   }
 }
 
@@ -1212,28 +1167,28 @@ function drawSuperBar(player, playerNum, x, y) {
     text(`SUPER ${player.superCharge}/${maxCharge}`, x + barWidth / 2, y + barHeight / 2);
   }
   pop();
-}function drawGame() {
+}
+
+function drawGame() {
   push();
   translate(random(-screenShake, screenShake), random(-screenShake, screenShake));
   
-  for (let i = 0; i < height; i += 3) {
-    let inter = map(i, 0, height, 0, 1);
-    let c = lerpColor(color(15, 20, 40), color(30, 40, 70), inter);
-    stroke(c);
-    strokeWeight(3);
-    line(0, i, width, i);
-  }
+  background(20, 25, 45);
   
-  updateBackgroundParticles();
+  if (frameCount % 4 === 0) {
+    updateBackgroundParticles();
+  }
   drawBackgroundParticles();
   
-  stroke(100, 150, 200, 40);
-  strokeWeight(1);
-  for (let x = (frameCount % 40); x < width; x += 40) {
-    line(x, 0, x, height);
-  }
-  for (let y = (frameCount % 40); y < height; y += 40) {
-    line(0, y, width, y);
+  if (frameCount % 2 === 0) {
+    stroke(100, 150, 200, 30);
+    strokeWeight(1);
+    for (let x = (frameCount % 40); x < width; x += 40) {
+      line(x, 0, x, height);
+    }
+    for (let y = (frameCount % 40); y < height; y += 40) {
+      line(0, y, width, y);
+    }
   }
   
   if (introProgress < 1) {
@@ -1265,13 +1220,13 @@ function drawSuperBar(player, playerNum, x, y) {
     winner = 2;
     gameState = 'gameOver';
     gameOverTime = millis();
-    addParticleBurst(width/2, height/2, 50, color(255, 100, 100));
+    addParticleBurst(width/2, height/2, 40, color(255, 100, 100));
     screenShake = 15;
   } else if (player2.health <= 0) {
     winner = 1;
     gameState = 'gameOver';
     gameOverTime = millis();
-    addParticleBurst(width/2, height/2, 50, color(100, 200, 255));
+    addParticleBurst(width/2, height/2, 40, color(100, 200, 255));
     screenShake = 15;
   }
   
@@ -1385,11 +1340,11 @@ function updatePoisonGas() {
 function drawPoisonGas() {
   if (!poisonGas.active) return;
   
-  let pulseAlpha = map(sin(millis() * 0.005), -1, 1, 60, 100);
+  let pulseAlpha = map(sin(millis() * 0.005), -1, 1, 50, 90);
   
   push();
-  drawingContext.shadowBlur = 25;
-  drawingContext.shadowColor = 'rgba(0, 255, 0, 0.4)';
+  drawingContext.shadowBlur = 20;
+  drawingContext.shadowColor = 'rgba(0, 255, 0, 0.3)';
   
   fill(0, 255, 100, pulseAlpha);
   noStroke();
@@ -1399,8 +1354,8 @@ function drawPoisonGas() {
   rect(0, poisonGas.topBorder, poisonGas.leftBorder, height - poisonGas.topBorder - poisonGas.bottomBorder);
   rect(width - poisonGas.rightBorder, poisonGas.topBorder, poisonGas.rightBorder, height - poisonGas.topBorder - poisonGas.bottomBorder);
   
-  stroke(0, 255, 100, 200);
-  strokeWeight(3);
+  stroke(0, 255, 100, 180);
+  strokeWeight(2);
   noFill();
   line(0, poisonGas.topBorder, width, poisonGas.topBorder);
   line(0, height - poisonGas.bottomBorder, width, height - poisonGas.bottomBorder);
@@ -1488,7 +1443,7 @@ function generateMap() {
     walls.push({x: (cols - 1) * cellSize, y: i * cellSize, w: cellSize, h: cellSize, isBorder: true});
   }
   
-  let numWallGroups = floor((cols * rows) * 0.01);
+  let numWallGroups = floor((cols * rows) * 0.008);
   for (let i = 0; i < numWallGroups; i++) {
     let x = floor(random(3, cols - 3)) * cellSize;
     let y = floor(random(3, rows - 3)) * cellSize;
@@ -1578,18 +1533,14 @@ function drawMap() {
   for (let wall of walls) {
     push();
     if (wall.isBorder) {
-      drawingContext.shadowBlur = 10;
-      drawingContext.shadowColor = 'rgba(100, 120, 180, 0.4)';
       fill(60, 70, 110);
       stroke(100, 120, 180);
     } else {
-      drawingContext.shadowBlur = 8;
-      drawingContext.shadowColor = 'rgba(80, 100, 150, 0.3)';
       fill(50, 60, 95);
       stroke(80, 100, 150);
     }
     strokeWeight(2);
-    rect(wall.x, wall.y, wall.w, wall.h, 8);
+    rect(wall.x, wall.y, wall.w, wall.h, 6);
     pop();
   }
 }
@@ -1601,17 +1552,16 @@ function startGame() {
 }
 
 function drawSelectionScreen() {
-  for (let i = 0; i < height; i += 2) {
-    let inter = map(i, 0, height, 0, 1);
-    let c = lerpColor(color(10, 15, 35), color(25, 35, 60), inter);
-    stroke(c);
-    strokeWeight(2);
-    line(0, i, width, i);
-  }
+  background(15, 20, 40);
   
-  updateBackgroundParticles();
+  if (frameCount % 4 === 0) {
+    updateBackgroundParticles();
+  }
   drawBackgroundParticles();
-  updateGridLines();
+  
+  if (frameCount % 3 === 0) {
+    updateGridLines();
+  }
   drawGridLines();
   
   push();
@@ -1793,9 +1743,7 @@ function drawBotSelectionSide(startX, endX) {
     textStyle(BOLD);
     text(shapes[i].toUpperCase(), shapeX, shapeY + 50);
   }
-}
-
-function updateBotAI() {
+}function updateBotAI() {
   let currentTime = millis();
   
   if (currentTime - botDecisionTimer > botDecisionInterval) {
@@ -2006,7 +1954,9 @@ function moveBotInDirection(dirX, dirY, speedMultiplier = 1.5) {
     player2.lastMoveTime = millis();
     player2.rotation += 0.08;
   }
-}function updateTriangleBullets() {
+}
+
+function updateTriangleBullets() {
   if (player1Choice === 'triangle' && player1.triangleBulletCount > 0) {
     if (millis() - player1.lastBulletTime > 100) {
       projectiles.push({
@@ -2209,7 +2159,7 @@ function attack(attacker, target, shape, playerNum, isSuper) {
   if (isSuper) {
     attackColor = color(255, 255, 100);
     screenShake = 8;
-    addParticleBurst(attacker.x, attacker.y, 15, attackColor);
+    addParticleBurst(attacker.x, attacker.y, 12, attackColor);
   }
   
   if (shape === 'square') {
@@ -2417,7 +2367,7 @@ function updateMeleeEffects() {
 
 function drawMeleeEffects() {
   for (let effect of meleeEffects) {
-    let alpha = map(effect.life, 0, effect.maxLife, 0, 255);
+    let alpha = map(effect.life, 0, effect.maxLife, 0, 200);
     let size = effect.size || 150;
     
     push();
@@ -2426,7 +2376,7 @@ function drawMeleeEffects() {
     if (effect.isCircular) {
       noFill();
       stroke(red(effect.color), green(effect.color), blue(effect.color), alpha);
-      strokeWeight(10);
+      strokeWeight(8);
       circle(0, 0, size);
     } else if (effect.width) {
       rotate(effect.angle);
@@ -2438,13 +2388,13 @@ function drawMeleeEffects() {
       rotate(effect.angle);
       noFill();
       stroke(red(effect.color), green(effect.color), blue(effect.color), alpha);
-      strokeWeight(12);
+      strokeWeight(10);
       line(0, 0, size, 0);
     } else {
       rotate(effect.angle);
       noFill();
       stroke(red(effect.color), green(effect.color), blue(effect.color), alpha);
-      strokeWeight(10);
+      strokeWeight(8);
       arc(0, 0, size, size, -PI/4, PI/4);
     }
     
@@ -2594,10 +2544,8 @@ function updateProjectiles() {
 function drawProjectiles() {
   for (let proj of projectiles) {
     push();
-    drawingContext.shadowBlur = 15;
-    drawingContext.shadowColor = `rgba(${red(proj.color)}, ${green(proj.color)}, ${blue(proj.color)}, 0.6)`;
     fill(proj.color);
-    stroke(255, 255, 255, 200);
+    stroke(255, 255, 255, 180);
     strokeWeight(2);
     
     push();
@@ -2625,7 +2573,7 @@ function drawProjectiles() {
 }
 
 function createExplosion(x, y, owner, color) {
-  addParticleBurst(x, y, 20, color);
+  addParticleBurst(x, y, 15, color);
   
   for (let i = 0; i < 6; i++) {
     let angle = (TWO_PI / 6) * i;
