@@ -9,7 +9,6 @@ let currentGameId = null;
 let isConnected = false;
 
 // ===== GAME BALANCE VARIABLES ===== 
-// (Keep all your existing balance variables the same)
 let square_damage = 3000;
 let square_super_damage = 5000;
 let square_movement_speed = 5;
@@ -52,7 +51,6 @@ let trapezoid_dash_distance = 200;
 
 const MAX_PARTICLES = 150;
 
-// (Keep all your existing variables)
 let backgroundParticles = [];
 let menuAnimationOffset = 0;
 let transitionAlpha = 0;
@@ -71,7 +69,6 @@ let lastCountdownTime = 0;
 let gameOverTime = 0;
 let winner = null;
 
-// Bot AI variables
 let botDecisionTimer = 0;
 let botDecisionInterval = 300;
 let botTarget = {x: 0, y: 0};
@@ -126,8 +123,8 @@ let introProgress = 0;
 
 // ===== MULTIPLAYER CONNECTION =====
 function initializeMultiplayer() {
-  // Connect to your server (change this URL to your deployed server)
-  socket = io('https://shape-battle.onrender.com');
+  // Use dynamic URL - works for both local and deployed
+  socket = io(window.location.origin);
 
   socket.on('connect', () => {
     console.log('Connected to server!');
@@ -261,12 +258,16 @@ function setup() {
   initializeMultiplayer();
 }
 
-// Continue with all your existing functions...
-// I'll show the key modifications needed:
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  if (gameState === 'playing') {
+    generateMap();
+  }
+  initGridLines();
+}
 
 // ===== MODIFIED MODE SELECTION =====
 function drawModeSelection() {
-  // (Keep existing background code)
   for (let i = 0; i < height; i += 2) {
     let inter = map(i, 0, height, 0, 1);
     let c = lerpColor(color(10, 15, 35), color(25, 35, 60), inter);
@@ -294,7 +295,6 @@ function drawModeSelection() {
   textStyle(NORMAL);
   text("ARENA COMBAT", width/2, height * 0.32);
   
-  // Three buttons: Single Player, Local 2P, Online Multiplayer
   let singlePlayerX = width/2 - 300;
   let twoPlayerX = width/2;
   let onlinePlayerX = width/2 + 300;
@@ -309,7 +309,6 @@ function drawModeSelection() {
   let onlineHovered = mouseX > onlinePlayerX - buttonW/2 && mouseX < onlinePlayerX + buttonW/2 &&
                       mouseY > buttonY - buttonH/2 && mouseY < buttonY + buttonH/2;
   
-  // Single Player Button
   push();
   if (singleHovered) {
     drawingContext.shadowBlur = 30;
@@ -329,7 +328,6 @@ function drawModeSelection() {
   fill(200, 220, 255);
   text("VS BOT", singlePlayerX, buttonY + 20);
   
-  // Local 2 Player Button
   push();
   if (twoHovered) {
     drawingContext.shadowBlur = 30;
@@ -349,7 +347,6 @@ function drawModeSelection() {
   fill(255, 200, 200);
   text("LOCAL", twoPlayerX, buttonY + 20);
   
-  // Online Multiplayer Button
   push();
   if (onlineHovered) {
     drawingContext.shadowBlur = 30;
@@ -405,7 +402,6 @@ function drawWaitingScreen() {
   textStyle(NORMAL);
   text(`Please wait${dots}`, width/2, height/2 + 30);
   
-  // Cancel button
   let buttonW = 200;
   let buttonH = 60;
   let buttonX = width/2;
@@ -450,22 +446,12 @@ function draw() {
       gameState = 'countdown';
       lastCountdownTime = millis();
       countdownTimer = 3;
-    } else if (isMultiplayer && myPlayerNumber) {
-      // In multiplayer, wait for server to start countdown
-      let myChoice = (myPlayerNumber === 1) ? player1Choice : player2Choice;
-      if (myChoice) {
-        // Character already selected, waiting for opponent
-        fill(200, 255, 200);
-        textSize(20);
-        text("Waiting for opponent to choose...", width/2, height * 0.9);
-      }
     }
   } else if (gameState === 'countdown') {
     drawCountdown();
   } else if (gameState === 'playing') {
     drawGame();
     
-    // Send position updates in multiplayer
     if (isMultiplayer && frameCount % 2 === 0) {
       sendPlayerUpdate();
     }
@@ -505,7 +491,6 @@ function mousePressed() {
       }
     }
   } else if (gameState === 'waiting') {
-    // Cancel button
     let buttonW = 200;
     let buttonH = 60;
     let buttonX = width/2;
@@ -517,42 +502,49 @@ function mousePressed() {
       resetGame();
     }
   } else if (gameState === 'selection') {
-    // Character selection
     let cols = 3;
     let rows = 3;
     
     if (isMultiplayer) {
-      // Only allow selecting for your player
+      // In multiplayer, only allow selecting on YOUR side
       let gridStartX = myPlayerNumber === 1 ? (width/2) * 0.15 : width/2 + (width/2) * 0.15;
       let gridWidth = (width/2) * 0.7;
       let cellWidth = gridWidth / cols;
       let cellHeight = height * 0.22;
       let gridStartY = height * 0.15;
       
-      for (let i = 0; i < shapes.length; i++) {
-        let col = i % cols;
-        let row = floor(i / cols);
-        let shapeX = gridStartX + col * cellWidth + cellWidth / 2;
-        let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
-        
-        if (dist(mouseX, mouseY, shapeX, shapeY) < 40) {
-          if (myPlayerNumber === 1) {
-            player1Choice = shapes[i];
-            socket.emit('character-selected', {
-              gameId: currentGameId,
-              character: shapes[i]
-            });
-          } else {
-            player2Choice = shapes[i];
-            socket.emit('character-selected', {
-              gameId: currentGameId,
-              character: shapes[i]
-            });
+      // Determine which side of screen was clicked
+      let clickedOnLeftSide = mouseX < width/2;
+      let clickedOnRightSide = mouseX > width/2;
+      
+      // Only process click if it's on YOUR side
+      if ((myPlayerNumber === 1 && clickedOnLeftSide) || (myPlayerNumber === 2 && clickedOnRightSide)) {
+        for (let i = 0; i < shapes.length; i++) {
+          let col = i % cols;
+          let row = floor(i / cols);
+          let shapeX = gridStartX + col * cellWidth + cellWidth / 2;
+          let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
+          
+          if (dist(mouseX, mouseY, shapeX, shapeY) < 40) {
+            if (myPlayerNumber === 1) {
+              player1Choice = shapes[i];
+              socket.emit('character-selected', {
+                gameId: currentGameId,
+                character: shapes[i]
+              });
+            } else {
+              player2Choice = shapes[i];
+              socket.emit('character-selected', {
+                gameId: currentGameId,
+                character: shapes[i]
+              });
+            }
+            break;
           }
         }
       }
     } else {
-      // Local game selection (keep existing code)
+      // Local game selection
       let p1GridStartX = (width/2) * 0.15;
       let p1GridWidth = (width/2) * 0.7;
       let cellWidth = p1GridWidth / cols;
@@ -627,7 +619,6 @@ function mousePressed() {
 
 // ===== MODIFIED UPDATE PLAYERS =====
 function updatePlayers() {
-  // Determine which player is controlled locally
   let localPlayer = null;
   let localPlayerNum = 0;
   
@@ -639,16 +630,23 @@ function updatePlayers() {
     localPlayerNum = 1;
   }
   
-  // Update local player
+  // Update local player (WASD + Arrow Keys for multiplayer)
   if (localPlayer && !localPlayer.isDashing) {
     let pNewX = localPlayer.x;
     let pNewY = localPlayer.y;
     let pMoved = false;
     
-    if (keyIsDown(87)) { pNewY -= localPlayer.speed; pMoved = true; }
-    if (keyIsDown(83)) { pNewY += localPlayer.speed; pMoved = true; }
-    if (keyIsDown(65)) { pNewX -= localPlayer.speed; pMoved = true; }
-    if (keyIsDown(68)) { pNewX += localPlayer.speed; pMoved = true; }
+    // WASD controls
+    if (keyIsDown(87)) { pNewY -= localPlayer.speed; pMoved = true; } // W
+    if (keyIsDown(83)) { pNewY += localPlayer.speed; pMoved = true; } // S
+    if (keyIsDown(65)) { pNewX -= localPlayer.speed; pMoved = true; } // A
+    if (keyIsDown(68)) { pNewX += localPlayer.speed; pMoved = true; } // D
+    
+    // Arrow keys (also work in multiplayer)
+    if (keyIsDown(UP_ARROW)) { pNewY -= localPlayer.speed; pMoved = true; }
+    if (keyIsDown(DOWN_ARROW)) { pNewY += localPlayer.speed; pMoved = true; }
+    if (keyIsDown(LEFT_ARROW)) { pNewX -= localPlayer.speed; pMoved = true; }
+    if (keyIsDown(RIGHT_ARROW)) { pNewX += localPlayer.speed; pMoved = true; }
     
     if (!checkCollision(pNewX, pNewY, localPlayer.size)) {
       localPlayer.x = pNewX;
@@ -661,7 +659,7 @@ function updatePlayers() {
     }
   }
   
-  // Handle super attacks
+  // Handle super attacks (SPACEBAR for multiplayer)
   if (isMultiplayer && localPlayer) {
     let myChoice = localPlayerNum === 1 ? player1Choice : player2Choice;
     let maxCharge = (myChoice === 'triangle' || myChoice === 'oval') ? 10 : 4;
@@ -690,7 +688,6 @@ function updatePlayers() {
     
     updateBotAI();
   } else if (gameMode === 'two') {
-    // Local 2 player code (keep existing)
     let p1MaxCharge = (player1Choice === 'triangle' || player1Choice === 'oval') ? 10 : 4;
     if (keyIsDown(86) && player1.superCharge >= p1MaxCharge && !player1.superActive && !player1.isDashing) {
       let targetX = player2.x;
@@ -757,7 +754,6 @@ function dealDamage(player, damage, attacker) {
   
   screenShake = 6;
   
-  // Send damage to server in multiplayer
   if (isMultiplayer) {
     let targetNum = player === player1 ? 1 : 2;
     sendDamage(damage, targetNum);
@@ -794,7 +790,6 @@ function resetGame() {
   initGridLines();
 }
 
-// ===== KEEP ALL YOUR OTHER EXISTING FUNCTIONS =====
 // ===== GRID LINES =====
 function initGridLines() {
   gridLines = [];
@@ -892,14 +887,6 @@ function drawBackgroundParticles() {
     fill(p.hue, 150, 255, p.alpha * pulse * 0.3);
     circle(p.x, p.y, p.size * pulse * 2);
   }
-}
-
-function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
-  if (gameState === 'playing') {
-    generateMap();
-  }
-  initGridLines();
 }
 
 // ===== COUNTDOWN =====
@@ -1350,9 +1337,9 @@ function drawGame() {
   fill(200, 220, 255);
   textSize(14);
   if (gameMode === 'single') {
-    text("WASD Move • Left Click Attack • Spacebar Super", width/2, height - 20);
+    text("WASD/Arrows Move • Left Click Attack • Spacebar Super", width/2, height - 20);
   } else if (isMultiplayer) {
-    text("WASD Move • Left Click Attack • Spacebar Super", width/2, height - 20);
+    text("WASD/Arrows Move • Left Click Attack • Spacebar Super", width/2, height - 20);
   } else {
     text("P1: WASD • C Attack • V Super | P2: Arrows • , Attack • . Super", width/2, height - 20);
   }
@@ -1738,7 +1725,6 @@ function drawPlayerSide(playerNum, startX, endX) {
     let isHovered = dist(mouseX, mouseY, shapeX, shapeY) < 40 && 
                     ((playerNum === 1 && mouseX < width/2) || (playerNum === 2 && mouseX > width/2));
     
-    // In multiplayer, only show hover on your side
     if (isMultiplayer && playerNum !== myPlayerNumber) {
       isHovered = false;
     }
@@ -1850,7 +1836,6 @@ function drawBotSelectionSide(startX, endX) {
     text(shapes[i].toUpperCase(), shapeX, shapeY + 50);
   }
 }
-
 // ===== ENHANCED BOT AI =====
 function updateBotAI() {
   let currentTime = millis();
