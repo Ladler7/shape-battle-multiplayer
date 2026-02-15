@@ -18,16 +18,12 @@ const io = socketIo(server, {
 
 const PORT = process.env.PORT || 3000;
 
-// Serve static files from current directory
 app.use(express.static(__dirname));
 
-// Serve index.html for root route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Rest of your server.js code continues here...
-// Game state management
 const waitingPlayers = [];
 const activeGames = new Map();
 const players = new Map();
@@ -61,6 +57,7 @@ class Game {
     };
     this.state = 'selection';
     this.gameStartTime = 0;
+    this.mapSeed = 0; // NEW: Shared map seed
   }
 
   bothPlayersReady() {
@@ -78,7 +75,6 @@ class Game {
   }
 }
 
-// Socket.io connection handling
 io.on('connection', (socket) => {
   console.log(`Player connected: ${socket.id}`);
   players.set(socket.id, { socket });
@@ -130,13 +126,21 @@ io.on('connection', (socket) => {
 
     if (game.bothPlayersReady()) {
       game.state = 'countdown';
+      
+      // NEW: Generate one shared map seed for both players
+      game.mapSeed = Math.floor(Math.random() * 1000000);
+      console.log(`Game ${game.id} starting with map seed: ${game.mapSeed}`);
+
+      // Send same seed to both players
       io.to(game.players[1].socket.id).emit('start-countdown', {
         player1Choice: game.players[1].choice,
-        player2Choice: game.players[2].choice
+        player2Choice: game.players[2].choice,
+        mapSeed: game.mapSeed
       });
       io.to(game.players[2].socket.id).emit('start-countdown', {
         player1Choice: game.players[1].choice,
-        player2Choice: game.players[2].choice
+        player2Choice: game.players[2].choice,
+        mapSeed: game.mapSeed
       });
 
       setTimeout(() => {
@@ -193,7 +197,15 @@ io.on('connection', (socket) => {
     const game = activeGames.get(gameId);
     if (!game || game.state !== 'playing') return;
 
+    // FIX: Prevent negative health and double damage
+    if (game.players[targetPlayer].health <= 0) return;
+
     game.players[targetPlayer].health -= damage;
+    
+    // Clamp health to 0
+    if (game.players[targetPlayer].health < 0) {
+      game.players[targetPlayer].health = 0;
+    }
 
     io.to(game.players[1].socket.id).emit('health-update', {
       player1Health: game.players[1].health,
