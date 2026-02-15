@@ -493,7 +493,13 @@ function mousePressed() {
     let gridStartY = height * 0.15;
     
     if (isMultiplayer) {
-      // NEW: Single centered grid for multiplayer
+      // Check if we have a player number assigned
+      if (!myPlayerNumber) {
+        console.log("Waiting for player number assignment...");
+        return;
+      }
+      
+      // Single centered grid for multiplayer
       let gridStartX = width/2 - (width * 0.35);
       let gridWidth = width * 0.7;
       let cellWidth = gridWidth / cols;
@@ -505,16 +511,21 @@ function mousePressed() {
         let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
         
         if (dist(mouseX, mouseY, shapeX, shapeY) < 40) {
+          // Set choice based on player number
           if (myPlayerNumber === 1) {
             player1Choice = shapes[i];
-          } else {
+          } else if (myPlayerNumber === 2) {
             player2Choice = shapes[i];
           }
           
-          socket.emit('character-selected', {
-            gameId: currentGameId,
-            character: shapes[i]
-          });
+          // Send to server
+          if (socket && currentGameId) {
+            socket.emit('character-selected', {
+              gameId: currentGameId,
+              character: shapes[i]
+            });
+            console.log(`Player ${myPlayerNumber} selected: ${shapes[i]}`);
+          }
           break;
         }
       }
