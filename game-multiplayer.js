@@ -43,7 +43,7 @@ let octagon_bullet_speed = 12;
 let octagon_split_distance = 500;
 let trapezoid_damage = 3000;
 let trapezoid_super_damage = 3000;
-let trapezoid_movement_speed = 7;
+let trapezoid_movement_speed = 5;
 let trapezoid_dash_distance = 200;
 
 const MAX_PARTICLES = 60;
@@ -77,6 +77,8 @@ let botAttackTimer = 0;
 let botLastPlayerPos = {x: 0, y: 0};
 let botPredictedPlayerPos = {x: 0, y: 0};
 let botStrafeDirection = 1;
+
+let sharedMapSeed = 0;
 
 let player1 = {
   x: 0, y: 0, size: 30, speed: 5, color: null,
@@ -152,9 +154,10 @@ function initializeMultiplayer() {
     }
   });
 
-  socket.on('start-countdown', ({ player1Choice: p1, player2Choice: p2 }) => {
+  socket.on('start-countdown', ({ player1Choice: p1, player2Choice: p2, mapSeed }) => {
     player1Choice = p1;
     player2Choice = p2;
+    sharedMapSeed = mapSeed;
     gameState = 'countdown';
     lastCountdownTime = millis();
     countdownTimer = 3;
@@ -486,35 +489,28 @@ function mousePressed() {
     let gridStartY = height * 0.15;
     
     if (isMultiplayer) {
-      let myStartX = myPlayerNumber === 1 ? 0 : width/2;
-      let myEndX = myPlayerNumber === 1 ? width/2 : width;
-      let myGridStartX = myStartX + (myEndX - myStartX) * 0.15;
-      let gridWidth = (myEndX - myStartX) * 0.7;
+      let gridStartX = width * 0.25;
+      let gridWidth = width * 0.5;
       let cellWidth = gridWidth / cols;
       
-      let clickedOnMySide = (myPlayerNumber === 1 && mouseX < width/2) || 
-                            (myPlayerNumber === 2 && mouseX > width/2);
-      
-      if (clickedOnMySide) {
-        for (let i = 0; i < shapes.length; i++) {
-          let col = i % cols;
-          let row = floor(i / cols);
-          let shapeX = myGridStartX + col * cellWidth + cellWidth / 2;
-          let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
-          
-          if (dist(mouseX, mouseY, shapeX, shapeY) < 40) {
-            if (myPlayerNumber === 1) {
-              player1Choice = shapes[i];
-            } else {
-              player2Choice = shapes[i];
-            }
-            
-            socket.emit('character-selected', {
-              gameId: currentGameId,
-              character: shapes[i]
-            });
-            break;
+      for (let i = 0; i < shapes.length; i++) {
+        let col = i % cols;
+        let row = floor(i / cols);
+        let shapeX = gridStartX + col * cellWidth + cellWidth / 2;
+        let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
+        
+        if (dist(mouseX, mouseY, shapeX, shapeY) < 40) {
+          if (myPlayerNumber === 1) {
+            player1Choice = shapes[i];
+          } else {
+            player2Choice = shapes[i];
           }
+          
+          socket.emit('character-selected', {
+            gameId: currentGameId,
+            character: shapes[i]
+          });
+          break;
         }
       }
     } else {
@@ -746,6 +742,7 @@ function resetGame() {
   isMultiplayer = false;
   myPlayerNumber = null;
   currentGameId = null;
+  sharedMapSeed = 0;
   generateMap();
   initBackgroundParticles();
   initGridLines();
@@ -899,7 +896,7 @@ function drawGameOver() {
   let winnerName = "";
   
   if (gameMode === 'single') {
-    winnerName = winner === 1 ? "PLAYER WINS!" : "BOT WINS!";
+    winnerName = winner === 1 ? "YOU WIN!" : "BOT WINS!";
   } else if (isMultiplayer) {
     winnerName = winner === myPlayerNumber ? "YOU WIN!" : "YOU LOSE!";
   } else {
@@ -1433,6 +1430,10 @@ function generateMap() {
   let cols = floor(width / cellSize);
   let rows = floor(height / cellSize);
   
+  if (isMultiplayer && sharedMapSeed !== 0) {
+    randomSeed(sharedMapSeed);
+  }
+  
   for (let i = 0; i < cols; i++) {
     walls.push({x: i * cellSize, y: 0, w: cellSize, h: cellSize, isBorder: true});
     walls.push({x: i * cellSize, y: (rows - 1) * cellSize, w: cellSize, h: cellSize, isBorder: true});
@@ -1459,6 +1460,8 @@ function generateMap() {
       }
     }
   }
+  
+  randomSeed(millis());
   
   player1.x = cellSize * 2;
   player1.y = cellSize * 2;
@@ -1564,20 +1567,96 @@ function drawSelectionScreen() {
   }
   drawGridLines();
   
-  push();
-  drawingContext.shadowBlur = 20;
-  drawingContext.shadowColor = 'rgba(100, 200, 255, 0.5)';
-  stroke(100, 150, 255, 150);
-  strokeWeight(3);
-  line(width/2, 0, width/2, height);
-  pop();
+  if (!isMultiplayer) {
+    push();
+    drawingContext.shadowBlur = 20;
+    drawingContext.shadowColor = 'rgba(100, 200, 255, 0.5)';
+    stroke(100, 150, 255, 150);
+    strokeWeight(3);
+    line(width/2, 0, width/2, height);
+    pop();
+  }
   
   if (gameMode === 'single') {
     drawPlayerSide(1, 0, width/2);
     drawBotSelectionSide(width/2, width);
   } else if (isMultiplayer) {
-    drawPlayerSide(myPlayerNumber, 0, width/2);
-    drawPlayerSide(myPlayerNumber === 1 ? 2 : 1, width/2, width);
+    let playerColor = myPlayerNumber === 1 ? color(100, 180, 255) : color(255, 80, 80);
+    
+    push();
+    drawingContext.shadowBlur = 20;
+    drawingContext.shadowColor = myPlayerNumber === 1 ? 'rgba(100, 180, 255, 0.5)' : 'rgba(255, 80, 80, 0.5)';
+    fill(playerColor);
+    textSize(36);
+    textStyle(BOLD);
+    text("CHOOSE YOUR CHARACTER", width/2, height * 0.08);
+    pop();
+    textStyle(NORMAL);
+    
+    let cols = 3;
+    let rows = 3;
+    let gridStartX = width * 0.25;
+    let gridWidth = width * 0.5;
+    let cellWidth = gridWidth / cols;
+    let cellHeight = height * 0.22;
+    let gridStartY = height * 0.15;
+    
+    for (let i = 0; i < shapes.length; i++) {
+      let col = i % cols;
+      let row = floor(i / cols);
+      let shapeX = gridStartX + col * cellWidth + cellWidth / 2;
+      let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
+      
+      let myChoice = myPlayerNumber === 1 ? player1Choice : player2Choice;
+      let isSelected = myChoice === shapes[i];
+      let isHovered = dist(mouseX, mouseY, shapeX, shapeY) < 40;
+      
+      push();
+      if (isSelected) {
+        drawingContext.shadowBlur = 20;
+        drawingContext.shadowColor = myPlayerNumber === 1 ? 'rgba(100, 180, 255, 0.6)' : 'rgba(255, 80, 80, 0.6)';
+        fill(myPlayerNumber === 1 ? color(100, 180, 255, 150) : color(255, 80, 80, 150));
+        stroke(myPlayerNumber === 1 ? color(100, 180, 255) : color(255, 80, 80));
+        strokeWeight(4);
+      } else if (isHovered) {
+        drawingContext.shadowBlur = 15;
+        drawingContext.shadowColor = 'rgba(255, 255, 255, 0.5)';
+        fill(255, 255, 255, 180);
+        stroke(200, 220, 255);
+        strokeWeight(3);
+      } else {
+        fill(60, 70, 100, 200);
+        stroke(100, 120, 160);
+        strokeWeight(2);
+      }
+      
+      rect(shapeX - 35, shapeY - 35, 70, 70, 12);
+      pop();
+      
+      fill(240, 245, 255);
+      stroke(60, 70, 90);
+      strokeWeight(2);
+      
+      push();
+      translate(shapeX, shapeY);
+      drawPlayerShape(shapes[i], 28);
+      pop();
+      
+      fill(200, 220, 255);
+      noStroke();
+      textSize(11);
+      textStyle(BOLD);
+      text(shapes[i].toUpperCase(), shapeX, shapeY + 50);
+    }
+    
+    fill(255, 255, 255, 200);
+    textSize(18);
+    textStyle(NORMAL);
+    if (!player1Choice || !player2Choice) {
+      text("Waiting for both players to select...", width/2, height * 0.9);
+    } else {
+      text("Both players selected! Starting soon...", width/2, height * 0.9);
+    }
   } else {
     drawPlayerSide(1, 0, width/2);
     drawPlayerSide(2, width/2, width);
@@ -1589,7 +1668,7 @@ function drawSelectionScreen() {
   if (gameMode === 'single') {
     text("✨ Choose your character and the bot's character • Click to select ✨", width/2, height * 0.97);
   } else if (isMultiplayer) {
-    text("✨ Choose your character • Waiting for opponent... ✨", width/2, height * 0.97);
+    text("✨ Choose your character ✨", width/2, height * 0.97);
   } else {
     text("✨ Player 1 and Player 2: Choose your characters • Click to select ✨", width/2, height * 0.97);
   }
@@ -1607,11 +1686,7 @@ function drawPlayerSide(playerNum, startX, endX) {
   fill(playerColor);
   textSize(36);
   textStyle(BOLD);
-  if (isMultiplayer) {
-    text(playerNum === myPlayerNumber ? "YOU" : "OPPONENT", midX, height * 0.08);
-  } else {
-    text(gameMode === 'single' && playerNum === 1 ? "Player" : `Player ${playerNum}`, midX, height * 0.08);
-  }
+  text(gameMode === 'single' && playerNum === 1 ? "Player" : `Player ${playerNum}`, midX, height * 0.08);
   pop();
   textStyle(NORMAL);
   
@@ -1632,10 +1707,6 @@ function drawPlayerSide(playerNum, startX, endX) {
     let isSelected = (playerNum === 1 && player1Choice === shapes[i]) || (playerNum === 2 && player2Choice === shapes[i]);
     let isHovered = dist(mouseX, mouseY, shapeX, shapeY) < 40 && 
                     ((playerNum === 1 && mouseX < width/2) || (playerNum === 2 && mouseX > width/2));
-    
-    if (isMultiplayer && playerNum !== myPlayerNumber) {
-      isHovered = false;
-    }
     
     push();
     if (isSelected) {
@@ -1743,7 +1814,9 @@ function drawBotSelectionSide(startX, endX) {
     textStyle(BOLD);
     text(shapes[i].toUpperCase(), shapeX, shapeY + 50);
   }
-}function updateBotAI() {
+}
+
+function updateBotAI() {
   let currentTime = millis();
   
   if (currentTime - botDecisionTimer > botDecisionInterval) {
@@ -1964,7 +2037,7 @@ function updateTriangleBullets() {
         vx: cos(player1.triangleTargetAngle) * triangle_bullet_speed,
         vy: sin(player1.triangleTargetAngle) * triangle_bullet_speed,
         damage: triangle_damage, owner: 1, color: color(100, 150, 255),
-        size: 8, maxDistance: Infinity, type: 'triangle',
+        size: 12, maxDistance: Infinity, type: 'triangle',
         destroysWalls: false, rotation: 0
       });
       player1.triangleBulletCount--;
@@ -1979,7 +2052,7 @@ function updateTriangleBullets() {
         vx: cos(player2.triangleTargetAngle) * triangle_bullet_speed,
         vy: sin(player2.triangleTargetAngle) * triangle_bullet_speed,
         damage: triangle_damage, owner: 2, color: color(255, 50, 50),
-        size: 8, maxDistance: Infinity, type: 'triangle',
+        size: 12, maxDistance: Infinity, type: 'triangle',
         destroysWalls: false, rotation: 0
       });
       player2.triangleBulletCount--;
@@ -2028,7 +2101,7 @@ function updateSuperTriangleBullets() {
         vx: cos(player1.superTriangleTargetAngle) * triangle_super_bullet_speed,
         vy: sin(player1.superTriangleTargetAngle) * triangle_super_bullet_speed,
         damage: triangle_super_damage, owner: 1, color: color(255, 255, 100),
-        size: 12, maxDistance: Infinity, type: 'super-triangle',
+        size: 30, maxDistance: Infinity, type: 'super-triangle',
         destroysWalls: true, rotation: 0
       });
       player1.superBulletCount--;
@@ -2047,7 +2120,7 @@ function updateSuperTriangleBullets() {
         vx: cos(player2.superTriangleTargetAngle) * triangle_super_bullet_speed,
         vy: sin(player2.superTriangleTargetAngle) * triangle_super_bullet_speed,
         damage: triangle_super_damage, owner: 2, color: color(255, 255, 100),
-        size: 12, maxDistance: Infinity, type: 'super-triangle',
+        size: 30, maxDistance: Infinity, type: 'super-triangle',
         destroysWalls: true, rotation: 0
       });
       player2.superBulletCount--;
@@ -2068,7 +2141,7 @@ function updateSuperOvalBullets() {
         vx: cos(player1.superOvalTargetAngle) * oval_bullet_speed,
         vy: sin(player1.superOvalTargetAngle) * oval_bullet_speed,
         damage: oval_super_damage, owner: 1, color: color(255, 255, 100),
-        size: 15, maxDistance: Infinity, type: 'super-oval',
+        size: 30, maxDistance: Infinity, type: 'super-oval',
         destroysWalls: false, bounces: 0, maxBounces: 5, rotation: 0
       });
       player1.superBulletCount--;
@@ -2087,7 +2160,7 @@ function updateSuperOvalBullets() {
         vx: cos(player2.superOvalTargetAngle) * oval_bullet_speed,
         vy: sin(player2.superOvalTargetAngle) * oval_bullet_speed,
         damage: oval_super_damage, owner: 2, color: color(255, 255, 100),
-        size: 15, maxDistance: Infinity, type: 'super-oval',
+        size: 30, maxDistance: Infinity, type: 'super-oval',
         destroysWalls: false, bounces: 0, maxBounces: 5, rotation: 0
       });
       player2.superBulletCount--;
@@ -2169,10 +2242,10 @@ function attack(attacker, target, shape, playerNum, isSuper) {
     if (isSuper) {
       meleeEffects.push({
         x: attacker.x, y: attacker.y, angle: angle, color: attackColor,
-        life: 30, maxLife: 30, size: 250
+        life: 30, maxLife: 30, size: 300
       });
       
-      if (distance < 250) {
+      if (distance < 300) {
         dealDamage(opponent, square_super_damage, attacker);
         screenShake = 12;
       }
@@ -2206,7 +2279,7 @@ function attack(attacker, target, shape, playerNum, isSuper) {
         vx: cos(angle) * circle_super_bullet_speed,
         vy: sin(angle) * circle_super_bullet_speed,
         damage: circle_super_damage, owner: playerNum, color: attackColor,
-        size: 35, maxDistance: 700, type: 'super-circle',
+        size: 60, maxDistance: 700, type: 'super-circle',
         destroysWalls: true, rotation: 0
       });
     } else {
@@ -2238,7 +2311,7 @@ function attack(attacker, target, shape, playerNum, isSuper) {
         vx: cos(angle) * pentagon_bullet_speed,
         vy: sin(angle) * pentagon_bullet_speed,
         damage: pentagon_super_damage, owner: playerNum, color: attackColor,
-        size: 25, maxDistance: Infinity, type: 'super-pentagon',
+        size: 60, maxDistance: Infinity, type: 'super-pentagon',
         destroysWalls: false, goesThrough: true, rotation: 0
       });
     } else {
@@ -2247,7 +2320,7 @@ function attack(attacker, target, shape, playerNum, isSuper) {
         vx: cos(angle) * pentagon_bullet_speed,
         vy: sin(angle) * pentagon_bullet_speed,
         damage: pentagon_damage, owner: playerNum, color: attackColor,
-        size: 15, maxDistance: Infinity, type: 'pentagon',
+        size: 20, maxDistance: Infinity, type: 'pentagon',
         destroysWalls: false, rotation: 0
       });
     }
@@ -2271,7 +2344,18 @@ function attack(attacker, target, shape, playerNum, isSuper) {
     }
   } else if (shape === 'rhombus') {
     if (isSuper) {
-      attacker.rhombusMode = attacker.rhombusMode === 1 ? 2 : 1;
+      let angle = atan2(opponent.y - attacker.y, opponent.x - attacker.x);
+      
+      meleeEffects.push({
+        x: attacker.x, y: attacker.y, angle: angle, color: attackColor,
+        life: 30, maxLife: 30, size: 400, width: 60
+      });
+      
+      let distance = dist(attacker.x, attacker.y, opponent.x, opponent.y);
+      if (distance < 400) {
+        dealDamage(opponent, 2000, attacker);
+        screenShake = 15;
+      }
     } else {
       if (attacker.rhombusMode === 1) {
         let angle = atan2(target.y - attacker.y, target.x - attacker.x);
@@ -2292,7 +2376,7 @@ function attack(attacker, target, shape, playerNum, isSuper) {
         
         let distance = dist(attacker.x, attacker.y, opponent.x, opponent.y);
         if (distance < rhombus_melee_range) {
-          dealDamage(opponent, rhombus_damage, attacker);
+          dealDamage(opponent, rhombus_damage + 1000, attacker);
           screenShake = 6;
         }
       }
@@ -2311,7 +2395,7 @@ function attack(attacker, target, shape, playerNum, isSuper) {
         vx: cos(angle) * 15, vy: sin(angle) * 15,
         damage: octagon_super_damage, owner: playerNum, color: attackColor,
         size: 40, maxDistance: Infinity, type: 'octagon-super-pull',
-        destroysWalls: true, pullTarget: opponent, pullStrength: 15, rotation: 0
+        destroysWalls: true, pullTarget: opponent, pullStrength: 25, rotation: 0
       });
     } else {
       let angle = atan2(target.y - attacker.y, target.x - attacker.x);
@@ -2432,7 +2516,7 @@ function updateProjectiles() {
     }
     
     if (proj.type === 'octagon-super-pull' && proj.pullTarget) {
-      let pullAngle = atan2(proj.startY - proj.pullTarget.y, proj.startX - proj.pullTarget.x);
+      let pullAngle = atan2(proj.y - proj.pullTarget.y, proj.x - proj.pullTarget.x);
       
       let newX = proj.pullTarget.x + cos(pullAngle) * proj.pullStrength;
       let newY = proj.pullTarget.y + sin(pullAngle) * proj.pullStrength;
@@ -2622,51 +2706,46 @@ function checkWallCollision(x, y, size) {
     if (x + halfSize > wall.x && x - halfSize < wall.x + wall.w &&
         y + halfSize > wall.y && y - halfSize < wall.y + wall.h) {
       return wall;
-    }
-  }
-  return null;
 }
-
+}
+return null;
+}
 function checkCollision(x, y, size) {
-  return checkWallCollision(x, y, size) !== null;
+return checkWallCollision(x, y, size) !== null;
 }
-
 function checkShieldCollision(proj) {
-  if (player1.shieldActive && proj.owner !== 1) {
-    if (dist(proj.x, proj.y, player1.x, player1.y) < player1.size + 20) {
-      return {owner: 1, color: color(100, 150, 255)};
-    }
-  }
-  
-  if (player2.shieldActive && proj.owner !== 2) {
-    if (dist(proj.x, proj.y, player2.x, player2.y) < player2.size + 20) {
-      return {owner: 2, color: color(255, 50, 50)};
-    }
-  }
-  
-  return null;
+if (player1.shieldActive && proj.owner !== 1) {
+if (dist(proj.x, proj.y, player1.x, player1.y) < player1.size + 20) {
+return {owner: 1, color: color(100, 150, 255)};
 }
-
+}
+if (player2.shieldActive && proj.owner !== 2) {
+if (dist(proj.x, proj.y, player2.x, player2.y) < player2.size + 20) {
+return {owner: 2, color: color(255, 50, 50)};
+}
+}
+return null;
+}
 function keyPressed() {
-  if (gameState === 'playing' && gameMode === 'two') {
-    if (keyCode === 67) {
-      let p1Cooldown = (player1Choice === 'triangle' || player1Choice === 'oval') ? 2000 : 1000;
-      if (millis() - player1.lastAttack > p1Cooldown && !player1.isDashing) {
-        let targetX = player2.x;
-        let targetY = player2.y;
-        attack(player1, {x: targetX, y: targetY}, player1Choice, 1, false);
-        player1.lastAttack = millis();
-        player1.lastMoveTime = millis();
-      }
-    } else if (keyCode === 188) {
-      let p2Cooldown = (player2Choice === 'triangle' || player2Choice === 'oval') ? 2000 : 1000;
-      if (millis() - player2.lastAttack > p2Cooldown && !player2.isDashing) {
-        let targetX = player1.x;
-        let targetY = player1.y;
-        attack(player2, {x: targetX, y: targetY}, player2Choice, 2, false);
-        player2.lastAttack = millis();
-        player2.lastMoveTime = millis();
-      }
-    }
-  }
+if (gameState === 'playing' && gameMode === 'two') {
+if (keyCode === 67) {
+let p1Cooldown = (player1Choice === 'triangle' || player1Choice === 'oval') ? 2000 : 1000;
+if (millis() - player1.lastAttack > p1Cooldown && !player1.isDashing) {
+let targetX = player2.x;
+let targetY = player2.y;
+attack(player1, {x: targetX, y: targetY}, player1Choice, 1, false);
+player1.lastAttack = millis();
+player1.lastMoveTime = millis();
+}
+} else if (keyCode === 188) {
+let p2Cooldown = (player2Choice === 'triangle' || player2Choice === 'oval') ? 2000 : 1000;
+if (millis() - player2.lastAttack > p2Cooldown && !player2.isDashing) {
+let targetX = player1.x;
+let targetY = player1.y;
+attack(player2, {x: targetX, y: targetY}, player2Choice, 2, false);
+player2.lastAttack = millis();
+player2.lastMoveTime = millis();
+}
+}
+}
 }
