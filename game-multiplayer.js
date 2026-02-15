@@ -124,7 +124,12 @@ let introProgress = 0;
 // ===== MULTIPLAYER CONNECTION =====
 function initializeMultiplayer() {
   // Use dynamic URL - works for both local and deployed
-  socket = io(window.location.origin);
+  socket = io({
+  transports: ['websocket', 'polling'],
+  reconnection: true,
+  reconnectionAttempts: 5,
+  timeout: 10000
+});
 
   socket.on('connect', () => {
     console.log('Connected to server!');
