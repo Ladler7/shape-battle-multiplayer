@@ -49,6 +49,96 @@ let trapezoid_super_damage = 3000;
 let trapezoid_movement_speed = 5;
 let trapezoid_dash_distance = 200;
 
+// ===== PRE-MADE MAPS (10 Brawl Stars-inspired, symmetric) =====
+// Each map is an array of {x, y} grid cell positions for interior walls.
+// Grid is 32x18 (1280/40 x 720/40). Coordinates kept 3+ cells from border.
+const PREMADE_MAPS = [
+  // 0: Snake Pit — Two S-shaped barriers
+  [
+    {x:8,y:4},{x:9,y:4},{x:10,y:4},{x:10,y:5},{x:10,y:6},{x:11,y:6},{x:12,y:6},
+    {x:19,y:11},{x:20,y:11},{x:21,y:11},{x:21,y:12},{x:21,y:13},{x:22,y:13},{x:23,y:13},
+    {x:14,y:8},{x:15,y:8},{x:16,y:8},{x:17,y:9},{x:14,y:9},{x:15,y:9}
+  ],
+  // 1: Parallel Walls — Three horizontal walls with gaps
+  [
+    {x:5,y:5},{x:6,y:5},{x:7,y:5},{x:8,y:5},{x:10,y:5},{x:11,y:5},{x:12,y:5},
+    {x:13,y:8},{x:14,y:8},{x:15,y:8},{x:17,y:8},{x:18,y:8},{x:19,y:8},
+    {x:19,y:12},{x:20,y:12},{x:21,y:12},{x:22,y:12},{x:24,y:12},{x:25,y:12},{x:26,y:12}
+  ],
+  // 2: Four Pillars — 2x2 block pillars
+  [
+    {x:8,y:5},{x:9,y:5},{x:8,y:6},{x:9,y:6},
+    {x:22,y:5},{x:23,y:5},{x:22,y:6},{x:23,y:6},
+    {x:8,y:11},{x:9,y:11},{x:8,y:12},{x:9,y:12},
+    {x:22,y:11},{x:23,y:11},{x:22,y:12},{x:23,y:12}
+  ],
+  // 3: Cross — Large plus shape in center
+  [
+    {x:15,y:6},{x:16,y:6},
+    {x:15,y:7},{x:16,y:7},
+    {x:13,y:8},{x:14,y:8},{x:15,y:8},{x:16,y:8},{x:17,y:8},{x:18,y:8},
+    {x:13,y:9},{x:14,y:9},{x:15,y:9},{x:16,y:9},{x:17,y:9},{x:18,y:9},
+    {x:15,y:10},{x:16,y:10},
+    {x:15,y:11},{x:16,y:11}
+  ],
+  // 4: Diamond — Diamond shape in center
+  [
+    {x:15,y:5},{x:16,y:5},
+    {x:14,y:6},{x:17,y:6},
+    {x:13,y:7},{x:18,y:7},
+    {x:12,y:8},{x:19,y:8},
+    {x:13,y:9},{x:18,y:9},
+    {x:14,y:10},{x:17,y:10},
+    {x:15,y:11},{x:16,y:11}
+  ],
+  // 5: Corridors — Vertical walls with offset gaps
+  [
+    {x:8,y:3},{x:8,y:4},{x:8,y:5},{x:8,y:6},{x:8,y:7},{x:8,y:8},
+    {x:15,y:9},{x:15,y:10},{x:15,y:11},{x:15,y:12},{x:15,y:13},{x:15,y:14},
+    {x:23,y:3},{x:23,y:4},{x:23,y:5},{x:23,y:6},{x:23,y:7},{x:23,y:8},
+    {x:16,y:3},{x:16,y:4},{x:16,y:5},{x:16,y:6},{x:16,y:7},{x:16,y:8}
+  ],
+  // 6: L-Shapes — Four L-shaped walls near corners
+  [
+    {x:5,y:4},{x:6,y:4},{x:7,y:4},{x:5,y:5},{x:5,y:6},
+    {x:24,y:4},{x:25,y:4},{x:26,y:4},{x:26,y:5},{x:26,y:6},
+    {x:5,y:11},{x:5,y:12},{x:5,y:13},{x:6,y:13},{x:7,y:13},
+    {x:26,y:11},{x:26,y:12},{x:24,y:13},{x:25,y:13},{x:26,y:13}
+  ],
+  // 7: Scattered Blocks — Small 1x2 blocks scattered symmetrically
+  [
+    {x:6,y:4},{x:7,y:4},
+    {x:24,y:4},{x:25,y:4},
+    {x:10,y:7},{x:11,y:7},
+    {x:20,y:7},{x:21,y:7},
+    {x:6,y:13},{x:7,y:13},
+    {x:24,y:13},{x:25,y:13},
+    {x:10,y:10},{x:11,y:10},
+    {x:20,y:10},{x:21,y:10},
+    {x:14,y:6},{x:14,y:7},
+    {x:17,y:10},{x:17,y:11}
+  ],
+  // 8: Ring — Circle of walls in center with openings
+  [
+    {x:14,y:5},{x:15,y:5},{x:16,y:5},{x:17,y:5},
+    {x:13,y:6},{x:18,y:6},
+    {x:12,y:7},{x:19,y:7},
+    {x:12,y:10},{x:19,y:10},
+    {x:13,y:11},{x:18,y:11},
+    {x:14,y:12},{x:15,y:12},{x:16,y:12},{x:17,y:12}
+  ],
+  // 9: Maze — Simple maze with multiple paths
+  [
+    {x:5,y:5},{x:6,y:5},{x:7,y:5},{x:8,y:5},{x:9,y:5},
+    {x:9,y:6},{x:9,y:7},{x:9,y:8},
+    {x:12,y:7},{x:13,y:7},{x:14,y:7},{x:15,y:7},
+    {x:15,y:8},{x:15,y:9},{x:15,y:10},
+    {x:16,y:10},{x:17,y:10},{x:18,y:10},{x:19,y:10},
+    {x:22,y:9},{x:22,y:10},{x:22,y:11},{x:22,y:12},
+    {x:22,y:12},{x:23,y:12},{x:24,y:12},{x:25,y:12},{x:26,y:12}
+  ]
+];
+
 const MAX_PARTICLES = 60;
 
 // ===== CANONICAL MAP DIMENSIONS =====
@@ -1073,23 +1163,17 @@ function generateMap() {
     for (let i = 0; i <= cols; i++) walls.push({x: i * BASE_CELL, y: bottomEdge, w: BASE_CELL, h: BASE_HEIGHT - bottomEdge + 5, isBorder: true});
   }
 
-  // Interior walls
-  let numWallGroups = floor((cols * rows) * 0.008);
-  for (let i = 0; i < numWallGroups; i++) {
-    let x = floor(random(3, cols - 3)) * BASE_CELL;
-    let y = floor(random(3, rows - 3)) * BASE_CELL;
-    let length = floor(random(2, 4));
-    let horizontal = random() > 0.5;
-    for (let j = 0; j < length; j++) {
-      let wx = horizontal ? x + j * BASE_CELL : x;
-      let wy = horizontal ? y : y + j * BASE_CELL;
-      if (wx > BASE_CELL && wy > BASE_CELL && wx < (cols - 2) * BASE_CELL && wy < (rows - 2) * BASE_CELL) {
-        walls.push({x: wx, y: wy, w: BASE_CELL, h: BASE_CELL, isBorder: false});
-      }
-    }
+  // Interior walls — pick from pre-made maps
+  let mapIndex;
+  if (isMultiplayer && mapSeed > 0) {
+    mapIndex = mapSeed % PREMADE_MAPS.length;
+  } else {
+    mapIndex = floor(random(PREMADE_MAPS.length));
   }
-
-  if (isMultiplayer && mapSeed > 0) randomSeed(millis());
+  let selectedMap = PREMADE_MAPS[mapIndex];
+  for (let cell of selectedMap) {
+    walls.push({x: cell.x * BASE_CELL, y: cell.y * BASE_CELL, w: BASE_CELL, h: BASE_CELL, isBorder: false});
+  }
 
   player1.size = 30;
   player2.size = 30;
@@ -1703,7 +1787,7 @@ if (proj.maxDistance && proj.maxDistance !== Infinity) {
 let wallHit = sweepCheckWall(prevX, prevY, proj.x, proj.y, proj.size);
 if (wallHit && !proj.goesThrough) {
   if ((proj.type === 'oval' || proj.type === 'super-oval') && proj.bounces < proj.maxBounces) {
-    bounceProjectile(proj, wallHit); proj.bounces++; proj.hitId = 0; screenShake = 3; continue;
+    bounceProjectile(proj, wallHit); proj.bounces++; screenShake = 3; continue;
   }
   if (proj.destroysWalls && !wallHit.isBorder) destroyWall(wallHit);
   if (proj.type === 'circle' || proj.type === 'super-circle') createExplosion(proj.x, proj.y, proj.owner, proj.color);
@@ -1727,7 +1811,11 @@ if (proj.owner === 1) {
     if (!isMultiplayer) dealDamage(player2, proj.damage, player1);
     else {
       player2.health -= proj.damage; player2.damageFlash = 255; player2.lastHitTime = millis();
-      if (myPlayerNumber === 1) sendDamage(proj.damage, 2);
+      if (myPlayerNumber === 1) {
+        let maxCharge = (player1Choice === 'triangle' || player1Choice === 'oval') ? 10 : 4;
+        if (player1.superCharge < maxCharge) player1.superCharge++;
+        sendDamage(proj.damage, 2);
+      }
     }
     if (proj.type === 'circle' || proj.type === 'super-circle') createExplosion(proj.x, proj.y, proj.owner, proj.color);
     if (!proj.goesThrough) { projectiles.splice(i, 1); screenShake = 6; continue; }
@@ -1739,7 +1827,11 @@ if (proj.owner === 1) {
     if (!isMultiplayer) dealDamage(player1, proj.damage, player2);
     else {
       player1.health -= proj.damage; player1.damageFlash = 255; player1.lastHitTime = millis();
-      if (myPlayerNumber === 2) sendDamage(proj.damage, 1);
+      if (myPlayerNumber === 2) {
+        let maxCharge = (player2Choice === 'triangle' || player2Choice === 'oval') ? 10 : 4;
+        if (player2.superCharge < maxCharge) player2.superCharge++;
+        sendDamage(proj.damage, 1);
+      }
     }
     if (proj.type === 'circle' || proj.type === 'super-circle') createExplosion(proj.x, proj.y, proj.owner, proj.color);
     if (!proj.goesThrough) { projectiles.splice(i, 1); screenShake = 6; continue; }
