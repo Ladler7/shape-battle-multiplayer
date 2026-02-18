@@ -722,8 +722,11 @@ function dealDamage(player, damage, attacker) {
   screenShake = 6;
 
   if (isMultiplayer) {
-    let targetNum = player === player1 ? 1 : 2;
-    sendDamage(damage, targetNum);
+    let attackerNum = attacker === player1 ? 1 : attacker === player2 ? 2 : null;
+    if (attackerNum === myPlayerNumber) {
+      let targetNum = player === player1 ? 1 : 2;
+      sendDamage(damage, targetNum);
+    }
   }
 }
 
