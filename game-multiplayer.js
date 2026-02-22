@@ -57,7 +57,7 @@ let crescent_zone_duration = 4000;
 let hexagon_damage = 1500;
 let hexagon_super_damage = 1000;
 let hexagon_movement_speed = 4;
-let hexagon_drone_speed = 4;
+let hexagon_drone_speed = 7;
 let hexagon_drone_duration = 4000;
 let hexagon_max_drones = 6;
 let arrow_damage = 4000;
@@ -1864,7 +1864,7 @@ function updateDrones() {
     let newX = drone.x + cos(angle) * drone.speed;
     let newY = drone.y + sin(angle) * drone.speed;
     if (!checkCollision(newX, newY, drone.size)) { drone.x = newX; drone.y = newY; }
-    else { drone.x += cos(angle + PI/3) * drone.speed; drone.y += sin(angle + PI/3) * drone.speed; }
+    else { addParticleBurst(drone.x, drone.y, 6, drone.color); drones.splice(i, 1); continue; }
     drone.rotation += 0.1;
     if (dist(drone.x, drone.y, target.x, target.y) < (drone.size + target.size) / 2 + 10) {
       let attacker = drone.owner === 1 ? player1 : player2;
