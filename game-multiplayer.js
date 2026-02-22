@@ -49,93 +49,100 @@ let trapezoid_super_damage = 3000;
 let trapezoid_movement_speed = 5;
 let trapezoid_dash_distance = 200;
 
-// ===== PRE-MADE MAPS (10 Brawl Stars-inspired, symmetric) =====
+// ===== PRE-MADE MAPS (10 symmetric, enclosed-center arenas) =====
 // Each map is an array of {x, y} grid cell positions for interior walls.
-// Grid is 32x18 (1280/40 x 720/40). Coordinates kept 3+ cells from border.
+// Grid is 32x18 (1280/40 x 720/40). All maps have full 4-way symmetry
+// (left-right and top-bottom mirrored). Center area (x=13-17, y=6-10)
+// is always kept clear as a 5x5+ fighting arena.
 const PREMADE_MAPS = [
-  // 0: Snake Pit — Two S-shaped barriers
+  // 0: Box Arena — Rectangular enclosure with 4 cardinal entrances
   [
-    {x:8,y:4},{x:9,y:4},{x:10,y:4},{x:10,y:5},{x:10,y:6},{x:11,y:6},{x:12,y:6},
-    {x:19,y:11},{x:20,y:11},{x:21,y:11},{x:21,y:12},{x:21,y:13},{x:22,y:13},{x:23,y:13},
-    {x:14,y:8},{x:15,y:8},{x:16,y:8},{x:17,y:9},{x:14,y:9},{x:15,y:9}
+    {x:12,y:5},{x:13,y:5},{x:14,y:5},{x:17,y:5},{x:18,y:5},{x:19,y:5},
+    {x:12,y:12},{x:13,y:12},{x:14,y:12},{x:17,y:12},{x:18,y:12},{x:19,y:12},
+    {x:11,y:6},{x:11,y:7},{x:11,y:10},{x:11,y:11},
+    {x:20,y:6},{x:20,y:7},{x:20,y:10},{x:20,y:11},
+    {x:5,y:4},{x:5,y:5},{x:26,y:4},{x:26,y:5},
+    {x:5,y:12},{x:5,y:13},{x:26,y:12},{x:26,y:13}
   ],
-  // 1: Parallel Walls — Three horizontal walls with gaps
+  // 1: Diamond Cage — Diamond-shaped walls enclosing center
   [
-    {x:5,y:5},{x:6,y:5},{x:7,y:5},{x:8,y:5},{x:10,y:5},{x:11,y:5},{x:12,y:5},
-    {x:13,y:8},{x:14,y:8},{x:15,y:8},{x:17,y:8},{x:18,y:8},{x:19,y:8},
-    {x:19,y:12},{x:20,y:12},{x:21,y:12},{x:22,y:12},{x:24,y:12},{x:25,y:12},{x:26,y:12}
+    {x:15,y:4},{x:16,y:4},
+    {x:13,y:5},{x:14,y:5},{x:17,y:5},{x:18,y:5},
+    {x:12,y:6},{x:19,y:6},
+    {x:11,y:7},{x:20,y:7},
+    {x:11,y:10},{x:20,y:10},
+    {x:12,y:11},{x:19,y:11},
+    {x:13,y:12},{x:14,y:12},{x:17,y:12},{x:18,y:12},
+    {x:15,y:13},{x:16,y:13}
   ],
-  // 2: Four Pillars — 2x2 block pillars
+  // 2: Corridor Clash — Parallel walls create lanes funneling into open center
   [
-    {x:8,y:5},{x:9,y:5},{x:8,y:6},{x:9,y:6},
-    {x:22,y:5},{x:23,y:5},{x:22,y:6},{x:23,y:6},
-    {x:8,y:11},{x:9,y:11},{x:8,y:12},{x:9,y:12},
-    {x:22,y:11},{x:23,y:11},{x:22,y:12},{x:23,y:12}
+    {x:4,y:5},{x:5,y:5},{x:6,y:5},{x:7,y:5},{x:8,y:5},{x:9,y:5},{x:10,y:5},{x:11,y:5},
+    {x:4,y:12},{x:5,y:12},{x:6,y:12},{x:7,y:12},{x:8,y:12},{x:9,y:12},{x:10,y:12},{x:11,y:12},
+    {x:20,y:5},{x:21,y:5},{x:22,y:5},{x:23,y:5},{x:24,y:5},{x:25,y:5},{x:26,y:5},{x:27,y:5},
+    {x:20,y:12},{x:21,y:12},{x:22,y:12},{x:23,y:12},{x:24,y:12},{x:25,y:12},{x:26,y:12},{x:27,y:12}
   ],
-  // 3: Cross — Large plus shape in center
-  [
-    {x:15,y:6},{x:16,y:6},
-    {x:15,y:7},{x:16,y:7},
-    {x:13,y:8},{x:14,y:8},{x:15,y:8},{x:16,y:8},{x:17,y:8},{x:18,y:8},
-    {x:13,y:9},{x:14,y:9},{x:15,y:9},{x:16,y:9},{x:17,y:9},{x:18,y:9},
-    {x:15,y:10},{x:16,y:10},
-    {x:15,y:11},{x:16,y:11}
-  ],
-  // 4: Diamond — Diamond shape in center
-  [
-    {x:15,y:5},{x:16,y:5},
-    {x:14,y:6},{x:17,y:6},
-    {x:13,y:7},{x:18,y:7},
-    {x:12,y:8},{x:19,y:8},
-    {x:13,y:9},{x:18,y:9},
-    {x:14,y:10},{x:17,y:10},
-    {x:15,y:11},{x:16,y:11}
-  ],
-  // 5: Corridors — Vertical walls with offset gaps
-  [
-    {x:8,y:3},{x:8,y:4},{x:8,y:5},{x:8,y:6},{x:8,y:7},{x:8,y:8},
-    {x:15,y:9},{x:15,y:10},{x:15,y:11},{x:15,y:12},{x:15,y:13},{x:15,y:14},
-    {x:23,y:3},{x:23,y:4},{x:23,y:5},{x:23,y:6},{x:23,y:7},{x:23,y:8},
-    {x:16,y:3},{x:16,y:4},{x:16,y:5},{x:16,y:6},{x:16,y:7},{x:16,y:8}
-  ],
-  // 6: L-Shapes — Four L-shaped walls near corners
+  // 3: Four Corners — L-shaped walls in corners, pillars frame center arena
   [
     {x:5,y:4},{x:6,y:4},{x:7,y:4},{x:5,y:5},{x:5,y:6},
     {x:24,y:4},{x:25,y:4},{x:26,y:4},{x:26,y:5},{x:26,y:6},
     {x:5,y:11},{x:5,y:12},{x:5,y:13},{x:6,y:13},{x:7,y:13},
-    {x:26,y:11},{x:26,y:12},{x:24,y:13},{x:25,y:13},{x:26,y:13}
+    {x:26,y:11},{x:26,y:12},{x:24,y:13},{x:25,y:13},{x:26,y:13},
+    {x:12,y:7},{x:19,y:7},{x:12,y:10},{x:19,y:10}
   ],
-  // 7: Scattered Blocks — Small 1x2 blocks scattered symmetrically
+  // 4: Octagon Arena — Octagonal enclosure with 4 entrances
   [
-    {x:6,y:4},{x:7,y:4},
-    {x:24,y:4},{x:25,y:4},
-    {x:10,y:7},{x:11,y:7},
-    {x:20,y:7},{x:21,y:7},
-    {x:6,y:13},{x:7,y:13},
-    {x:24,y:13},{x:25,y:13},
-    {x:10,y:10},{x:11,y:10},
-    {x:20,y:10},{x:21,y:10},
-    {x:14,y:6},{x:14,y:7},
-    {x:17,y:10},{x:17,y:11}
+    {x:14,y:4},{x:17,y:4},
+    {x:12,y:5},{x:13,y:5},{x:18,y:5},{x:19,y:5},
+    {x:11,y:6},{x:11,y:7},{x:20,y:6},{x:20,y:7},
+    {x:11,y:10},{x:11,y:11},{x:20,y:10},{x:20,y:11},
+    {x:12,y:12},{x:13,y:12},{x:18,y:12},{x:19,y:12},
+    {x:14,y:13},{x:17,y:13}
   ],
-  // 8: Ring — Circle of walls in center with openings
+  // 5: Pinch Points — Vertical barriers with pillars funnel to center
   [
-    {x:14,y:5},{x:15,y:5},{x:16,y:5},{x:17,y:5},
-    {x:13,y:6},{x:18,y:6},
-    {x:12,y:7},{x:19,y:7},
-    {x:12,y:10},{x:19,y:10},
-    {x:13,y:11},{x:18,y:11},
-    {x:14,y:12},{x:15,y:12},{x:16,y:12},{x:17,y:12}
+    {x:10,y:4},{x:10,y:5},{x:10,y:6},{x:10,y:7},
+    {x:10,y:10},{x:10,y:11},{x:10,y:12},{x:10,y:13},
+    {x:21,y:4},{x:21,y:5},{x:21,y:6},{x:21,y:7},
+    {x:21,y:10},{x:21,y:11},{x:21,y:12},{x:21,y:13},
+    {x:12,y:5},{x:19,y:5},{x:12,y:12},{x:19,y:12}
   ],
-  // 9: Maze — Simple maze with multiple paths
+  // 6: Colosseum — Large oval ring enclosure with wide entrances
   [
-    {x:5,y:5},{x:6,y:5},{x:7,y:5},{x:8,y:5},{x:9,y:5},
-    {x:9,y:6},{x:9,y:7},{x:9,y:8},
-    {x:12,y:7},{x:13,y:7},{x:14,y:7},{x:15,y:7},
-    {x:15,y:8},{x:15,y:9},{x:15,y:10},
-    {x:16,y:10},{x:17,y:10},{x:18,y:10},{x:19,y:10},
-    {x:22,y:9},{x:22,y:10},{x:22,y:11},{x:22,y:12},
-    {x:22,y:12},{x:23,y:12},{x:24,y:12},{x:25,y:12},{x:26,y:12}
+    {x:13,y:4},{x:14,y:4},{x:17,y:4},{x:18,y:4},
+    {x:11,y:5},{x:12,y:5},{x:19,y:5},{x:20,y:5},
+    {x:10,y:6},{x:10,y:7},{x:21,y:6},{x:21,y:7},
+    {x:10,y:10},{x:10,y:11},{x:21,y:10},{x:21,y:11},
+    {x:11,y:12},{x:12,y:12},{x:19,y:12},{x:20,y:12},
+    {x:13,y:13},{x:14,y:13},{x:17,y:13},{x:18,y:13}
+  ],
+  // 7: Double Wall — Inner enclosure with outer cover walls
+  [
+    {x:9,y:5},{x:9,y:6},{x:22,y:5},{x:22,y:6},
+    {x:9,y:11},{x:9,y:12},{x:22,y:11},{x:22,y:12},
+    {x:13,y:5},{x:14,y:5},{x:17,y:5},{x:18,y:5},
+    {x:12,y:6},{x:12,y:7},{x:19,y:6},{x:19,y:7},
+    {x:12,y:10},{x:12,y:11},{x:19,y:10},{x:19,y:11},
+    {x:13,y:12},{x:14,y:12},{x:17,y:12},{x:18,y:12}
+  ],
+  // 8: Cross Paths — Cross-shaped walls force pathing around to open center
+  [
+    {x:5,y:8},{x:6,y:8},{x:7,y:8},{x:8,y:8},{x:9,y:8},{x:10,y:8},
+    {x:5,y:9},{x:6,y:9},{x:7,y:9},{x:8,y:9},{x:9,y:9},{x:10,y:9},
+    {x:21,y:8},{x:22,y:8},{x:23,y:8},{x:24,y:8},{x:25,y:8},{x:26,y:8},
+    {x:21,y:9},{x:22,y:9},{x:23,y:9},{x:24,y:9},{x:25,y:9},{x:26,y:9},
+    {x:15,y:3},{x:16,y:3},{x:15,y:4},{x:16,y:4},
+    {x:15,y:13},{x:16,y:13},{x:15,y:14},{x:16,y:14}
+  ],
+  // 9: Fortress — Fortified spawn areas on each side, open center arena
+  [
+    {x:4,y:6},{x:5,y:6},{x:6,y:6},{x:7,y:6},
+    {x:4,y:11},{x:5,y:11},{x:6,y:11},{x:7,y:11},
+    {x:4,y:7},{x:4,y:8},{x:4,y:9},{x:4,y:10},
+    {x:24,y:6},{x:25,y:6},{x:26,y:6},{x:27,y:6},
+    {x:24,y:11},{x:25,y:11},{x:26,y:11},{x:27,y:11},
+    {x:27,y:7},{x:27,y:8},{x:27,y:9},{x:27,y:10},
+    {x:12,y:5},{x:19,y:5},{x:12,y:12},{x:19,y:12}
   ]
 ];
 
