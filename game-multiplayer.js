@@ -48,6 +48,24 @@ let trapezoid_damage = 3000;
 let trapezoid_super_damage = 3000;
 let trapezoid_movement_speed = 5;
 let trapezoid_dash_distance = 200;
+let crescent_damage = 2000;
+let crescent_super_damage = 1500;
+let crescent_movement_speed = 5;
+let crescent_bullet_speed = 10;
+let crescent_zone_damage = 800;
+let crescent_zone_duration = 4000;
+let hexagon_damage = 1500;
+let hexagon_super_damage = 1000;
+let hexagon_movement_speed = 4;
+let hexagon_drone_speed = 4;
+let hexagon_drone_duration = 4000;
+let hexagon_max_drones = 6;
+let arrow_damage = 4000;
+let arrow_super_damage = 5000;
+let arrow_movement_speed = 5;
+let arrow_bullet_speed = 18;
+let arrow_max_charge_time = 2000;
+let arrow_beam_width = 30;
 
 // ===== PRE-MADE MAPS (10 symmetric, enclosed-center arenas) =====
 // Each map is an array of {x, y} grid cell positions for interior walls.
@@ -166,7 +184,7 @@ let gameMode = null;
 let player1Choice = null;
 let player2Choice = null;
 let selectedBotCharacter = null;
-let shapes = ['square', 'triangle', 'circle', 'oval', 'pentagon', 'star', 'rhombus', 'octagon', 'trapezoid'];
+let shapes = ['square', 'triangle', 'circle', 'oval', 'pentagon', 'star', 'rhombus', 'octagon', 'trapezoid', 'crescent', 'hexagon', 'arrow'];
 let gameState = 'modeSelection';
 let countdownTimer = 3;
 let lastCountdownTime = 0;
@@ -199,7 +217,8 @@ let player1 = {
   superTriangleTargetAngle: 0, superOvalTargetAngle: 0, lastPoisonDamage: 0,
   shieldActive: false, shieldStartTime: 0, rhombusMode: 1,
   isDashing: false, dashStartX: 0, dashStartY: 0, dashTargetX: 0, dashTargetY: 0,
-  dashProgress: 0, rotation: 0, damageFlash: 0, scale: 1, trail: []
+  dashProgress: 0, rotation: 0, damageFlash: 0, scale: 1, trail: [],
+  arrowCharging: false, arrowChargeStart: 0
 };
 
 let player2 = {
@@ -212,7 +231,8 @@ let player2 = {
   superTriangleTargetAngle: 0, superOvalTargetAngle: 0, lastPoisonDamage: 0,
   shieldActive: false, shieldStartTime: 0, rhombusMode: 1,
   isDashing: false, dashStartX: 0, dashStartY: 0, dashTargetX: 0, dashTargetY: 0,
-  dashProgress: 0, rotation: 0, damageFlash: 0, scale: 1, trail: []
+  dashProgress: 0, rotation: 0, damageFlash: 0, scale: 1, trail: [],
+  arrowCharging: false, arrowChargeStart: 0
 };
 
 let poisonGas = {
@@ -223,6 +243,9 @@ let poisonGas = {
 let projectiles = [];
 let meleeEffects = [];
 let particles = [];
+let drones = [];
+let damageZones = [];
+let selectionScrollY = 0;
 let screenShake = 0;
 let walls = []; // stored in BASE coordinates
 let gameStartTime = 0;
@@ -521,7 +544,7 @@ function mousePressed() {
       socket.emit('cancel-matchmaking'); resetGame();
     }
   } else if (gameState === 'selection') {
-    let cols = 3, cellHeight = height * 0.22, gridStartY = height * 0.15;
+    let cols = 3, cellHeight = height * 0.18, gridStartY = height * 0.15;
 
     if (isMultiplayer) {
       if (!myPlayerNumber) return;
@@ -529,7 +552,7 @@ function mousePressed() {
       for (let i = 0; i < shapes.length; i++) {
         let col = i % cols, row = floor(i / cols);
         let shapeX = gridStartX + col * cellWidth + cellWidth / 2;
-        let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
+        let shapeY = gridStartY + row * cellHeight + cellHeight / 2 - selectionScrollY;
         if (dist(mouseX, mouseY, shapeX, shapeY) < 40) {
           if (myPlayerNumber === 1) player1Choice = shapes[i];
           else player2Choice = shapes[i];
@@ -543,8 +566,8 @@ function mousePressed() {
         for (let i = 0; i < shapes.length; i++) {
           let col = i % cols, row = floor(i / cols);
           let shapeX = p1GridStartX + col * cellWidth + cellWidth / 2;
-          let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
-          if (dist(mouseX, mouseY, shapeX, shapeY) < 40) { player1Choice = shapes[i]; break; }
+          let shapeY = gridStartY + row * cellHeight + cellHeight / 2 - selectionScrollY;
+          if (dist(mouseX, mouseY, shapeX, shapeY) < 35) { player1Choice = shapes[i]; break; }
         }
       }
       if (mouseX > width/2) {
@@ -552,8 +575,8 @@ function mousePressed() {
         for (let i = 0; i < shapes.length; i++) {
           let col = i % cols, row = floor(i / cols);
           let shapeX = p2GridStartX + col * cellWidth + cellWidth / 2;
-          let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
-          if (dist(mouseX, mouseY, shapeX, shapeY) < 40) {
+          let shapeY = gridStartY + row * cellHeight + cellHeight / 2 - selectionScrollY;
+          if (dist(mouseX, mouseY, shapeX, shapeY) < 35) {
             if (gameMode === 'single') { selectedBotCharacter = shapes[i]; player2Choice = shapes[i]; }
             else { player2Choice = shapes[i]; }
             break;
@@ -570,6 +593,9 @@ function mousePressed() {
       if (myPlayerNumber === 1 || myPlayerNumber === 2) {
         let myPlayer = myPlayerNumber === 1 ? player1 : player2;
         let myChoice = myPlayerNumber === 1 ? player1Choice : player2Choice;
+        if (myChoice === 'arrow' && !myPlayer.arrowCharging) {
+          myPlayer.arrowCharging = true; myPlayer.arrowChargeStart = millis(); return;
+        }
         let cooldown = (myChoice === 'triangle' || myChoice === 'oval') ? 2000 : 1000;
         if (millis() - myPlayer.lastAttack > cooldown && !myPlayer.isDashing) {
           let mouseTarget = { x: baseMouseX, y: baseMouseY };
@@ -580,6 +606,9 @@ function mousePressed() {
         }
       }
     } else if (gameMode === 'single') {
+      if (player1Choice === 'arrow' && !player1.arrowCharging) {
+        player1.arrowCharging = true; player1.arrowChargeStart = millis(); return;
+      }
       let p1Cooldown = (player1Choice === 'triangle' || player1Choice === 'oval') ? 2000 : 1000;
       if (millis() - player1.lastAttack > p1Cooldown && !player1.isDashing) {
         let mouseTarget = { x: baseMouseX, y: baseMouseY };
@@ -741,6 +770,7 @@ function resetGame() {
   screenShake = 0; gameState = 'modeSelection'; gameMode = null;
   player1Choice = null; player2Choice = null; selectedBotCharacter = null;
   particles = []; projectiles = []; meleeEffects = [];
+  drones = []; damageZones = []; selectionScrollY = 0;
   introProgress = 0; transitionAlpha = 0;
   botDecisionTimer = 0; botAction = 'idle'; botDodgeTimer = 0;
   botMovementTimer = 0; botAttackTimer = 0;
@@ -918,6 +948,9 @@ function drawPlayerShape(choice, size) {
   else if (choice === 'rhombus') { push(); rotate(PI/4); rect(-size/2, -size/2, size, size); pop(); }
   else if (choice === 'octagon') { beginShape(); for (let i = 0; i < 8; i++) { let a = (TWO_PI/8)*i; vertex(cos(a)*size/2, sin(a)*size/2); } endShape(CLOSE); }
   else if (choice === 'trapezoid') { beginShape(); vertex(-size/2, size/3); vertex(-size/3, -size/3); vertex(size/3, -size/3); vertex(size/2, size/3); endShape(CLOSE); }
+  else if (choice === 'crescent') { arc(0, 0, size, size, PI * 0.25, PI * 1.75); arc(size * 0.2, 0, size * 0.7, size * 0.7, PI * 0.25, PI * 1.75); }
+  else if (choice === 'hexagon') { beginShape(); for (let i = 0; i < 6; i++) { let a = (TWO_PI/6)*i - PI/2; vertex(cos(a)*size/2, sin(a)*size/2); } endShape(CLOSE); }
+  else if (choice === 'arrow') { beginShape(); vertex(0, -size/2); vertex(size/2, size/4); vertex(size/4, size/4); vertex(size/4, size/2); vertex(-size/4, size/2); vertex(-size/4, size/4); vertex(-size/2, size/4); endShape(CLOSE); }
 }
 
 function drawHealthBar(sx, sy, health, maxHealth, playerNum) {
@@ -1004,6 +1037,7 @@ function drawGame() {
   checkPoisonDamage(); updateTriangleBullets(); updateOvalBullets();
   updateSuperTriangleBullets(); updateSuperOvalBullets();
   updateDashes(); updateProjectiles(); updateMeleeEffects();
+  updateDrones(); updateDamageZones();
   updateAndDrawParticles(); updateDamageFlash(); updateTrails();
 
   if (screenShake > 0) { screenShake *= 0.9; if (screenShake < 0.1) screenShake = 0; }
@@ -1016,13 +1050,31 @@ function drawGame() {
     addParticleBurst(BASE_WIDTH/2, BASE_HEIGHT/2, 40, color(100, 200, 255)); screenShake = 15;
   }
 
-  drawMap(); drawPoisonGas(); drawMeleeEffects(); drawProjectiles();
+  drawMap(); drawPoisonGas(); drawDamageZones(); drawMeleeEffects(); drawProjectiles(); drawDrones();
   drawTrail(player1, 1); drawTrail(player2, 2);
   drawPlayer(player1, 1); drawPlayer(player2, 2);
   drawShields();
 
   drawSuperBar(player1, 1, 20, height - 80);
   drawSuperBar(player2, 2, width - 260, height - 80);
+
+  // Arrow charge indicator
+  if (player1.arrowCharging && player1Choice === 'arrow') {
+    let chargeRatio = constrain((millis() - player1.arrowChargeStart) / arrow_max_charge_time, 0, 1);
+    let cx = toScreenX(player1.x), cy = toScreenY(player1.y) + toScreenSize(player1.size) + 15;
+    fill(40, 40, 60); stroke(100, 120, 160); strokeWeight(2);
+    rect(cx - 30, cy, 60, 8, 4);
+    fill(lerp(100, 255, chargeRatio), lerp(200, 255, chargeRatio), lerp(255, 100, chargeRatio)); noStroke();
+    rect(cx - 28, cy + 2, 56 * chargeRatio, 4, 3);
+  }
+  if (player2.arrowCharging && player2Choice === 'arrow') {
+    let chargeRatio = constrain((millis() - player2.arrowChargeStart) / arrow_max_charge_time, 0, 1);
+    let cx = toScreenX(player2.x), cy = toScreenY(player2.y) + toScreenSize(player2.size) + 15;
+    fill(40, 40, 60); stroke(100, 120, 160); strokeWeight(2);
+    rect(cx - 30, cy, 60, 8, 4);
+    fill(lerp(255, 255, chargeRatio), lerp(100, 255, chargeRatio), lerp(100, 100, chargeRatio)); noStroke();
+    rect(cx - 28, cy + 2, 56 * chargeRatio, 4, 3);
+  }
 
   push();
   fill(0, 0, 0, 100); noStroke();
@@ -1193,7 +1245,7 @@ function generateMap() {
   player2.y = BASE_HEIGHT - BASE_CELL * 3 + BASE_CELL / 2;
 
   // Speeds in base units
-  let speedMap = { square: square_movement_speed, triangle: triangle_movement_speed, circle: circle_movement_speed, oval: oval_movement_speed, pentagon: pentagon_movement_speed, star: star_movement_speed, rhombus: rhombus_movement_speed, octagon: octagon_movement_speed, trapezoid: trapezoid_movement_speed };
+  let speedMap = { square: square_movement_speed, triangle: triangle_movement_speed, circle: circle_movement_speed, oval: oval_movement_speed, pentagon: pentagon_movement_speed, star: star_movement_speed, rhombus: rhombus_movement_speed, octagon: octagon_movement_speed, trapezoid: trapezoid_movement_speed, crescent: crescent_movement_speed, hexagon: hexagon_movement_speed, arrow: arrow_movement_speed };
   if (player1Choice) player1.speed = speedMap[player1Choice] || 5;
   if (player2Choice) player2.speed = speedMap[player2Choice] || 5;
 
@@ -1218,6 +1270,9 @@ function generateMap() {
 
   gameStartTime = millis();
   projectiles = []; meleeEffects = []; particles = [];
+  drones = []; damageZones = [];
+  player1.arrowCharging = false; player1.arrowChargeStart = 0;
+  player2.arrowCharging = false; player2.arrowChargeStart = 0;
   screenShake = 0; introProgress = 0;
 }
 
@@ -1276,13 +1331,25 @@ function drawMultiplayerSelection() {
   text("CHOOSE YOUR CHARACTER", width/2, height * 0.08); pop(); textStyle(NORMAL);
 
   let cols = 3, gridStartX = width/2 - (width * 0.35), gridWidth = width * 0.7;
-  let cellWidth = gridWidth / cols, cellHeight = height * 0.22, gridStartY = height * 0.15;
+  let cellWidth = gridWidth / cols, cellHeight = height * 0.18, gridStartY = height * 0.15;
+  let gridVisibleHeight = height * 0.68;
   let myChoice = myPlayerNumber === 1 ? player1Choice : player2Choice;
+  let totalRows = ceil(shapes.length / cols);
+  let totalGridHeight = totalRows * cellHeight;
+  let maxScroll = max(0, totalGridHeight - gridVisibleHeight);
+  selectionScrollY = constrain(selectionScrollY, 0, maxScroll);
+
+  // Clip region
+  drawingContext.save();
+  drawingContext.beginPath();
+  drawingContext.rect(gridStartX - 50, gridStartY - 50, gridWidth + 100, gridVisibleHeight + 50);
+  drawingContext.clip();
 
   for (let i = 0; i < shapes.length; i++) {
     let col = i % cols, row = floor(i / cols);
     let shapeX = gridStartX + col * cellWidth + cellWidth / 2;
-    let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
+    let shapeY = gridStartY + row * cellHeight + cellHeight / 2 - selectionScrollY;
+    if (shapeY < gridStartY - 60 || shapeY > gridStartY + gridVisibleHeight + 60) continue;
     let isSelected = myChoice === shapes[i];
     let isHovered = dist(mouseX, mouseY, shapeX, shapeY) < 40;
 
@@ -1297,10 +1364,15 @@ function drawMultiplayerSelection() {
     fill(200, 220, 255); noStroke(); textSize(13); textStyle(BOLD);
     text(shapes[i].toUpperCase(), shapeX, shapeY + 55);
   }
+  drawingContext.restore();
+
+  // Scroll indicators
+  if (selectionScrollY > 0) { fill(255, 255, 255, 150); noStroke(); textSize(20); text("▲ Scroll Up", width/2, gridStartY - 10); }
+  if (selectionScrollY < maxScroll) { fill(255, 255, 255, 150); noStroke(); textSize(20); text("▼ Scroll Down", width/2, gridStartY + gridVisibleHeight + 20); }
 
   fill(150, 200, 255); textSize(18); textStyle(NORMAL);
-  if (myChoice) text(`✓ You selected: ${myChoice.toUpperCase()}`, width/2, height * 0.88);
-  else { let a = map(sin(millis() * 0.008), -1, 1, 150, 255); fill(255, 255, 255, a); text("Click a character to select", width/2, height * 0.88); }
+  if (myChoice) text(`✓ You selected: ${myChoice.toUpperCase()}`, width/2, height * 0.92);
+  else { let a = map(sin(millis() * 0.008), -1, 1, 150, 255); fill(255, 255, 255, a); text("Click a character to select", width/2, height * 0.92); }
 }
 
 function drawPlayerSide(playerNum, startX, endX) {
@@ -1313,14 +1385,25 @@ function drawPlayerSide(playerNum, startX, endX) {
   pop(); textStyle(NORMAL);
 
   let cols = 3, gridStartX = startX + (endX - startX) * 0.15, gridWidth = (endX - startX) * 0.7;
-  let cellWidth = gridWidth / cols, cellHeight = height * 0.22, gridStartY = height * 0.15;
+  let cellWidth = gridWidth / cols, cellHeight = height * 0.18, gridStartY = height * 0.15;
+  let gridVisibleHeight = height * 0.68;
+  let totalRows = ceil(shapes.length / cols);
+  let totalGridHeight = totalRows * cellHeight;
+  let maxScroll = max(0, totalGridHeight - gridVisibleHeight);
+  let scrollY = constrain(selectionScrollY, 0, maxScroll);
+
+  drawingContext.save();
+  drawingContext.beginPath();
+  drawingContext.rect(startX, gridStartY - 40, endX - startX, gridVisibleHeight + 40);
+  drawingContext.clip();
 
   for (let i = 0; i < shapes.length; i++) {
     let col = i % cols, row = floor(i / cols);
     let shapeX = gridStartX + col * cellWidth + cellWidth / 2;
-    let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
+    let shapeY = gridStartY + row * cellHeight + cellHeight / 2 - scrollY;
+    if (shapeY < gridStartY - 50 || shapeY > gridStartY + gridVisibleHeight + 50) continue;
     let isSelected = (playerNum === 1 && player1Choice === shapes[i]) || (playerNum === 2 && player2Choice === shapes[i]);
-    let isHovered = dist(mouseX, mouseY, shapeX, shapeY) < 40 && ((playerNum === 1 && mouseX < width/2) || (playerNum === 2 && mouseX > width/2));
+    let isHovered = dist(mouseX, mouseY, shapeX, shapeY) < 35 && ((playerNum === 1 && mouseX < width/2) || (playerNum === 2 && mouseX > width/2));
 
     push();
     if (isSelected) { drawingContext.shadowBlur = 20; drawingContext.shadowColor = playerNum === 1 ? 'rgba(100, 180, 255, 0.6)' : 'rgba(255, 80, 80, 0.6)'; fill(playerNum === 1 ? color(100, 180, 255, 150) : color(255, 80, 80, 150)); stroke(playerNum === 1 ? color(100, 180, 255) : color(255, 80, 80)); strokeWeight(4); }
@@ -1331,8 +1414,12 @@ function drawPlayerSide(playerNum, startX, endX) {
     fill(240, 245, 255); stroke(60, 70, 90); strokeWeight(2);
     push(); translate(shapeX, shapeY); drawPlayerShape(shapes[i], 28); pop();
     fill(200, 220, 255); noStroke(); textSize(11); textStyle(BOLD);
-    text(shapes[i].toUpperCase(), shapeX, shapeY + 50);
+    text(shapes[i].toUpperCase(), shapeX, shapeY + 45);
   }
+  drawingContext.restore();
+
+  if (scrollY > 0) { fill(255, 255, 255, 120); noStroke(); textSize(16); text("▲", midX, gridStartY - 15); }
+  if (scrollY < maxScroll) { fill(255, 255, 255, 120); noStroke(); textSize(16); text("▼", midX, gridStartY + gridVisibleHeight + 15); }
 }
 
 function drawBotSelectionSide(startX, endX) {
@@ -1342,14 +1429,25 @@ function drawBotSelectionSide(startX, endX) {
   text("Bot Opponent", midX, height * 0.08); pop(); textStyle(NORMAL);
 
   let cols = 3, gridStartX = startX + (endX - startX) * 0.15, gridWidth = (endX - startX) * 0.7;
-  let cellWidth = gridWidth / cols, cellHeight = height * 0.22, gridStartY = height * 0.15;
+  let cellWidth = gridWidth / cols, cellHeight = height * 0.18, gridStartY = height * 0.15;
+  let gridVisibleHeight = height * 0.68;
+  let totalRows = ceil(shapes.length / cols);
+  let totalGridHeight = totalRows * cellHeight;
+  let maxScroll = max(0, totalGridHeight - gridVisibleHeight);
+  let scrollY = constrain(selectionScrollY, 0, maxScroll);
+
+  drawingContext.save();
+  drawingContext.beginPath();
+  drawingContext.rect(startX, gridStartY - 40, endX - startX, gridVisibleHeight + 40);
+  drawingContext.clip();
 
   for (let i = 0; i < shapes.length; i++) {
     let col = i % cols, row = floor(i / cols);
     let shapeX = gridStartX + col * cellWidth + cellWidth / 2;
-    let shapeY = gridStartY + row * cellHeight + cellHeight / 2;
+    let shapeY = gridStartY + row * cellHeight + cellHeight / 2 - scrollY;
+    if (shapeY < gridStartY - 50 || shapeY > gridStartY + gridVisibleHeight + 50) continue;
     let isSelected = selectedBotCharacter === shapes[i];
-    let isHovered = dist(mouseX, mouseY, shapeX, shapeY) < 40 && mouseX > width/2;
+    let isHovered = dist(mouseX, mouseY, shapeX, shapeY) < 35 && mouseX > width/2;
 
     push();
     if (isSelected) { drawingContext.shadowBlur = 20; drawingContext.shadowColor = 'rgba(255, 80, 80, 0.6)'; fill(255, 80, 80, 150); stroke(255, 80, 80); strokeWeight(4); }
@@ -1360,8 +1458,12 @@ function drawBotSelectionSide(startX, endX) {
     fill(240, 245, 255); stroke(60, 70, 90); strokeWeight(2);
     push(); translate(shapeX, shapeY); drawPlayerShape(shapes[i], 28); pop();
     fill(255, 200, 200); noStroke(); textSize(11); textStyle(BOLD);
-    text(shapes[i].toUpperCase(), shapeX, shapeY + 50);
+    text(shapes[i].toUpperCase(), shapeX, shapeY + 45);
   }
+  drawingContext.restore();
+
+  if (scrollY > 0) { fill(255, 255, 255, 120); noStroke(); textSize(16); text("▲", midX, gridStartY - 15); }
+  if (scrollY < maxScroll) { fill(255, 255, 255, 120); noStroke(); textSize(16); text("▼", midX, gridStartY + gridVisibleHeight + 15); }
 }
 
 // ==================== BOT AI ====================
@@ -1418,6 +1520,9 @@ function getOptimalDistance(choice) {
   if (choice === 'rhombus') return player2.rhombusMode === 1 ? 280 : 120;
   if (choice === 'trapezoid') return 160;
   if (choice === 'circle') return 300;
+  if (choice === 'crescent') return 250;
+  if (choice === 'hexagon') return 300;
+  if (choice === 'arrow') return 400;
   return 260;
 }
 
@@ -1455,6 +1560,8 @@ function botSmartAttack() {
     let shouldAttack = false;
     if (player2Choice === 'square' || player2Choice === 'star') shouldAttack = distToPlayer < 140 && random() < 0.7;
     else if (player2Choice === 'rhombus' && player2.rhombusMode === 2) shouldAttack = distToPlayer < 110 && random() < 0.7;
+    else if (player2Choice === 'hexagon') shouldAttack = distToPlayer < 500 && random() < 0.6;
+    else if (player2Choice === 'arrow') { player2.arrowChargeStart = millis() - random(500, 1500); shouldAttack = distToPlayer < 600 && random() < 0.6; }
     else shouldAttack = distToPlayer < 450 && random() < 0.7;
 
     if (shouldAttack) {
@@ -1689,7 +1796,133 @@ attacker.dashTargetY = attacker.y + sin(angle) * trapezoid_dash_distance;
 attacker.dashProgress = 0;
 meleeEffects.push({x: attacker.x, y: attacker.y, angle: angle, color: attackColor, life: 15, maxLife: 15, size: 80, isDash: true});
 }
+} else if (shape === 'crescent') {
+if (isSuper) {
+  let angle = atan2(target.y - attacker.y, target.x - attacker.x);
+  let baseDist = min(dist(attacker.x, attacker.y, target.x, target.y), 300);
+  for (let z = 0; z < 3; z++) {
+    let offsetAngle = angle + (z - 1) * 0.5;
+    let zx = attacker.x + cos(offsetAngle) * baseDist;
+    let zy = attacker.y + sin(offsetAngle) * baseDist;
+    damageZones.push({ x: zx, y: zy, radius: 80, damage: crescent_zone_damage, owner: playerNum, color: attackColor, spawnTime: millis(), duration: crescent_zone_duration, lastTick: 0 });
+  }
+  screenShake = 8;
+} else {
+  let angle = atan2(target.y - attacker.y, target.x - attacker.x);
+  projectiles.push({ x: attacker.x, y: attacker.y, startX: attacker.x, startY: attacker.y, vx: cos(angle) * crescent_bullet_speed, vy: sin(angle) * crescent_bullet_speed, damage: crescent_damage, owner: playerNum, color: attackColor, size: 18, maxDistance: 500, type: 'crescent', destroysWalls: false, rotation: 0, hitId: 0, crescentTime: 0, crescentAngle: angle });
 }
+} else if (shape === 'hexagon') {
+if (isSuper) {
+  for (let d = 0; d < 6; d++) {
+    let angle = (TWO_PI / 6) * d;
+    let spawnX = attacker.x + cos(angle) * 40;
+    let spawnY = attacker.y + sin(angle) * 40;
+    drones.push({ x: spawnX, y: spawnY, owner: playerNum, speed: hexagon_drone_speed, spawnTime: millis(), duration: hexagon_drone_duration, damage: hexagon_super_damage, color: attackColor, size: 12, rotation: 0 });
+  }
+  screenShake = 6;
+} else {
+  if (drones.filter(d => d.owner === playerNum).length < hexagon_max_drones) {
+    drones.push({ x: attacker.x, y: attacker.y, owner: playerNum, speed: hexagon_drone_speed, spawnTime: millis(), duration: hexagon_drone_duration, damage: hexagon_damage, color: attackColor, size: 12, rotation: 0 });
+  }
+}
+} else if (shape === 'arrow') {
+if (isSuper) {
+  let angle = atan2(target.y - attacker.y, target.x - attacker.x);
+  let beamRange = 800;
+  meleeEffects.push({ x: attacker.x, y: attacker.y, angle: angle, color: attackColor, life: 30, maxLife: 30, size: beamRange, width: arrow_beam_width, isBeam: true });
+  let distance = dist(attacker.x, attacker.y, opponent.x, opponent.y);
+  if (distance < beamRange) {
+    let perpDist = abs(sin(angle - atan2(opponent.y - attacker.y, opponent.x - attacker.x)) * distance);
+    if (perpDist < arrow_beam_width) { dealDamage(opponent, arrow_super_damage, attacker); screenShake = 12; }
+  }
+  // Destroy walls in beam path
+  for (let d = 0; d < beamRange; d += BASE_CELL) {
+    let cx = attacker.x + cos(angle) * d, cy = attacker.y + sin(angle) * d;
+    for (let w = walls.length - 1; w >= 0; w--) {
+      let wall = walls[w];
+      if (!wall.isBorder && cx > wall.x && cx < wall.x + wall.w && cy > wall.y && cy < wall.y + wall.h) walls.splice(w, 1);
+    }
+  }
+} else {
+  // Charge-based: instant fire with damage scaled by how long mouse was held
+  let chargeTime = constrain(millis() - attacker.arrowChargeStart, 0, arrow_max_charge_time);
+  let chargeMult = map(chargeTime, 0, arrow_max_charge_time, 0.3, 1.0);
+  let angle = atan2(target.y - attacker.y, target.x - attacker.x);
+  let speed = arrow_bullet_speed * map(chargeMult, 0.3, 1.0, 0.7, 1.0);
+  projectiles.push({ x: attacker.x, y: attacker.y, startX: attacker.x, startY: attacker.y, vx: cos(angle) * speed, vy: sin(angle) * speed, damage: floor(arrow_damage * chargeMult), owner: playerNum, color: attackColor, size: 14 + chargeMult * 10, maxDistance: Infinity, type: 'arrow', destroysWalls: false, rotation: 0, hitId: 0 });
+  attacker.arrowCharging = false; attacker.arrowChargeStart = 0;
+}
+}
+}
+// ==================== DRONES & DAMAGE ZONES ====================
+function updateDrones() {
+  for (let i = drones.length - 1; i >= 0; i--) {
+    let drone = drones[i];
+    if (millis() - drone.spawnTime > drone.duration) { drones.splice(i, 1); continue; }
+    let target = drone.owner === 1 ? player2 : player1;
+    let angle = atan2(target.y - drone.y, target.x - drone.x);
+    let newX = drone.x + cos(angle) * drone.speed;
+    let newY = drone.y + sin(angle) * drone.speed;
+    if (!checkCollision(newX, newY, drone.size)) { drone.x = newX; drone.y = newY; }
+    else { drone.x += cos(angle + PI/3) * drone.speed; drone.y += sin(angle + PI/3) * drone.speed; }
+    drone.rotation += 0.1;
+    if (dist(drone.x, drone.y, target.x, target.y) < (drone.size + target.size) / 2 + 10) {
+      let attacker = drone.owner === 1 ? player1 : player2;
+      if (!isMultiplayer) dealDamage(target, drone.damage, attacker);
+      else {
+        target.health -= drone.damage; target.damageFlash = 255; target.lastHitTime = millis();
+        if (myPlayerNumber === drone.owner) sendDamage(drone.damage, drone.owner === 1 ? 2 : 1);
+      }
+      addParticleBurst(drone.x, drone.y, 8, drone.color);
+      drones.splice(i, 1); screenShake = 4;
+    }
+  }
+}
+function drawDrones() {
+  for (let drone of drones) {
+    push();
+    translate(toScreenX(drone.x), toScreenY(drone.y));
+    rotate(drone.rotation);
+    fill(drone.color); stroke(255, 255, 255, 180); strokeWeight(2);
+    beginShape();
+    for (let j = 0; j < 6; j++) { let a = (TWO_PI/6)*j; vertex(cos(a)*toScreenSize(drone.size/2), sin(a)*toScreenSize(drone.size/2)); }
+    endShape(CLOSE);
+    pop();
+  }
+}
+function updateDamageZones() {
+  let currentTime = millis();
+  for (let i = damageZones.length - 1; i >= 0; i--) {
+    let zone = damageZones[i];
+    if (currentTime - zone.spawnTime > zone.duration) { damageZones.splice(i, 1); continue; }
+    if (currentTime - zone.lastTick >= 500) {
+      zone.lastTick = currentTime;
+      let target1 = zone.owner === 1 ? player2 : player1;
+      let target2 = zone.owner === 1 ? player1 : player2;
+      let attacker = zone.owner === 1 ? player1 : player2;
+      if (dist(zone.x, zone.y, target1.x, target1.y) < zone.radius + target1.size / 2) {
+        if (!isMultiplayer) dealDamage(target1, zone.damage, attacker);
+        else {
+          target1.health -= zone.damage; target1.damageFlash = 255; target1.lastHitTime = millis();
+          if (myPlayerNumber === zone.owner) sendDamage(zone.damage, zone.owner === 1 ? 2 : 1);
+        }
+      }
+    }
+  }
+}
+function drawDamageZones() {
+  for (let zone of damageZones) {
+    let lifeRatio = 1 - (millis() - zone.spawnTime) / zone.duration;
+    let pulse = map(sin(millis() * 0.01), -1, 1, 0.7, 1.0);
+    push();
+    drawingContext.shadowBlur = 20;
+    drawingContext.shadowColor = zone.owner === 1 ? 'rgba(100, 200, 255, 0.4)' : 'rgba(255, 100, 100, 0.4)';
+    fill(red(zone.color), green(zone.color), blue(zone.color), 60 * lifeRatio * pulse);
+    stroke(red(zone.color), green(zone.color), blue(zone.color), 150 * lifeRatio);
+    strokeWeight(3);
+    circle(toScreenX(zone.x), toScreenY(zone.y), toScreenSize(zone.radius * 2 * pulse));
+    pop();
+  }
 }
 // ==================== MELEE EFFECTS ====================
 function updateMeleeEffects() {
@@ -1739,6 +1972,17 @@ let prevY = proj.y;
 proj.x += proj.vx;
 proj.y += proj.vy;
 proj.rotation += 0.12;
+
+// Crescent boomerang arc
+if (proj.type === 'crescent') {
+  proj.crescentTime += 0.08;
+  let perpAngle = proj.crescentAngle + PI/2;
+  proj.x += cos(perpAngle) * sin(proj.crescentTime) * 3;
+  proj.y += sin(perpAngle) * sin(proj.crescentTime) * 3;
+  if (proj.crescentTime > PI) {
+    proj.vx *= -1; proj.vy *= -1; proj.crescentTime = 0;
+  }
+}
 
 // Octagon split
 if (proj.type === 'octagon-split' && !proj.hasSplit) {
@@ -1889,6 +2133,14 @@ rotate(proj.rotation);
 beginShape();
 for (let j = 0; j < 5; j++) { let a = (TWO_PI/5)*j - PI/2; vertex(cos(a)*toScreenSize(proj.size/2), sin(a)*toScreenSize(proj.size/2)); }
 endShape(CLOSE);
+} else if (proj.type === 'crescent') {
+let angle = atan2(proj.vy, proj.vx); rotate(angle);
+let s = toScreenSize(proj.size);
+arc(0, 0, s, s, -PI*0.75, PI*0.75);
+} else if (proj.type === 'arrow') {
+let angle = atan2(proj.vy, proj.vx); rotate(angle);
+let s = toScreenSize(proj.size/2);
+beginShape(); vertex(s, 0); vertex(-s, -s*0.6); vertex(-s*0.3, 0); vertex(-s, s*0.6); endShape(CLOSE);
 } else {
 circle(0, 0, toScreenSize(proj.size));
 }
@@ -1946,4 +2198,43 @@ player2.lastAttack = millis(); player2.lastMoveTime = millis();
 }
 }
 }
+}
+function mouseReleased() {
+  if (gameState !== 'playing') return;
+  let baseMouseX = toBaseX(mouseX), baseMouseY = toBaseY(mouseY);
+  if (isMultiplayer) {
+    let myPlayer = myPlayerNumber === 1 ? player1 : player2;
+    let myChoice = myPlayerNumber === 1 ? player1Choice : player2Choice;
+    if (myChoice === 'arrow' && myPlayer.arrowCharging) {
+      let cooldown = 1000;
+      if (millis() - myPlayer.lastAttack > cooldown && !myPlayer.isDashing) {
+        let mouseTarget = { x: baseMouseX, y: baseMouseY };
+        attack(myPlayer, mouseTarget, 'arrow', myPlayerNumber, false);
+        sendAttack(mouseTarget, false);
+        myPlayer.lastAttack = millis(); myPlayer.lastMoveTime = millis();
+      }
+      myPlayer.arrowCharging = false;
+    }
+  } else if (gameMode === 'single') {
+    if (player1Choice === 'arrow' && player1.arrowCharging) {
+      let cooldown = 1000;
+      if (millis() - player1.lastAttack > cooldown && !player1.isDashing) {
+        let mouseTarget = { x: baseMouseX, y: baseMouseY };
+        attack(player1, mouseTarget, 'arrow', 1, false);
+        player1.lastAttack = millis(); player1.lastMoveTime = millis();
+      }
+      player1.arrowCharging = false;
+    }
+  }
+}
+function mouseWheel(event) {
+  if (gameState === 'selection') {
+    selectionScrollY += event.delta;
+    let cols = 3, cellHeight = height * 0.18, gridVisibleHeight = height * 0.68;
+    let totalRows = ceil(shapes.length / cols);
+    let totalGridHeight = totalRows * cellHeight;
+    let maxScroll = max(0, totalGridHeight - gridVisibleHeight);
+    selectionScrollY = constrain(selectionScrollY, 0, maxScroll);
+    return false;
+  }
 }
